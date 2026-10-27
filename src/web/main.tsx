@@ -84,8 +84,9 @@ function Control(): JSX.Element {
   const [answer, setAnswer] = useState('');
   const [editingId, setEditingId] = useState('');
   const [saved, setSaved] = useState(false);
+  const [mode, setMode] = useState<'demo' | 'live'>('demo');
   const refreshAnswers = useCallback(() => { void api<{ answers: Answer[] }>('/api/answers').then((data) => setAnswers(data.answers)).catch((cause: unknown) => setError(cause instanceof Error ? cause.message : 'Could not load answers')); }, [setError]);
-  useEffect(() => { refreshAnswers(); }, [refreshAnswers]);
+  useEffect(() => { refreshAnswers(); void api<{ mode: 'demo' | 'live' }>('/api/status').then((status) => setMode(status.mode)).catch(() => undefined); }, [refreshAnswers]);
 
   const mutate = async (url: string, body?: object): Promise<void> => {
     try { await api(url, body ? { method: 'POST', body: JSON.stringify(body) } : { method: 'POST' }); setError(''); }
@@ -101,7 +102,7 @@ function Control(): JSX.Element {
   };
 
   return <main className="control-page">
-    <header className="app-header"><a className="brand" href="/control"><span className="brand-mark">B</span><span>backlog</span></a><nav><a className="nav-active" href="/control">Control room</a><a href="/overlay" target="_blank">Overlay ↗</a></nav><div className="header-status"><span className="live-pill"><i /> LIVE</span><span>Connected to chat</span></div></header>
+    <header className="app-header"><a className="brand" href="/control"><span className="brand-mark">B</span><span>backlog</span></a><nav><a className="nav-active" href="/control">Control room</a><a href="/overlay" target="_blank">Overlay ↗</a></nav><div className="header-status"><span className={`mode-badge ${mode}`}>{mode === 'demo' ? 'DEMO MODE' : 'LIVE MODE'}</span><span className="live-pill"><i /> LIVE</span><span>{mode === 'demo' ? 'Replay connected' : 'Connected to chat'}</span></div></header>
     <div className="control-wrap">
       <section className="page-intro"><div><p className="eyebrow">YOUR STREAM, IN SYNC</p><h1>Question queue</h1><p>Keep the good questions moving. Repeats are grouped automatically.</p></div><div className="queue-total"><strong>{items.length}</strong><span>open questions</span></div></section>
       <Toast message={error} />

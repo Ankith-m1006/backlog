@@ -85,6 +85,15 @@ export class BacklogStore extends EventEmitter {
   }
   dismiss(id: string): boolean { return this.setStatus(id, 'dismissed'); }
 
+  clearOpenQueue(): number {
+    const result = this.db.prepare("UPDATE questions SET status = 'dismissed' WHERE status = 'open'").run();
+    if (result.changes > 0) {
+      this.recordEvent('queue.cleared', null, { count: result.changes });
+      this.emit('queueChanged');
+    }
+    return result.changes;
+  }
+
   togglePin(id: string): boolean | undefined {
     const row = this.db.prepare('SELECT pinned FROM questions WHERE id = ?').get(id) as { pinned: number } | undefined;
     if (!row) return undefined;

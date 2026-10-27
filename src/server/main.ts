@@ -6,16 +6,20 @@ import type { ChatSource } from '../chat/types.js';
 import { QuestionPipeline } from '../classifier/pipeline.js';
 import type { Classification } from '../classifier/openai.js';
 import type { ChatMessage } from '../chat/types.js';
+import { ChatCommandHandler } from '../chat/commands.js';
 import { BacklogStore } from '../store/store.js';
 import { SavedAnswerService } from '../answers/service.js';
 import { HelixChatSender } from '../bot/helix.js';
 import { SavedAnswerQueue } from '../bot/saved-answer-queue.js';
+import { getBacklogMode } from '../config/mode.js';
 import { createApp } from './app.js';
 
 const dbPath = resolve(process.env.BACKLOG_DB_PATH ?? 'data/backlog.sqlite');
 await mkdir(dirname(dbPath), { recursive: true });
 const store = new BacklogStore(dbPath);
-const demoMode = process.env.BACKLOG_DEMO_MODE === '1';
+const mode = getBacklogMode();
+const demoMode = mode === 'demo';
+if (!demoMode && !process.env.OPENAI_API_KEY) throw new Error('OPENAI_API_KEY is required when BACKLOG_MODE=live');
 const classifyForDemo = async (messages: ChatMessage[]): Promise<Classification[]> => messages.map((message) => {
   const lower = message.text.toLowerCase();
   const topicKey = /join|party|lobby/u.test(lower) ? 'joining-the-lobby'
@@ -54,7 +58,8 @@ const answerQueue = process.env.TWITCH_ACCESS_TOKEN && process.env.TWITCH_CLIENT
     broadcasterId: process.env.TWITCH_BROADCASTER_USER_ID, botUserId: process.env.BOT_USER_ID,
   }), { onError: (error) => console.error('[Backlog] saved answer send failed', error.message) })
   : undefined;
-const app = await createApp({ store, webRoot: resolve('dist/web'), answerService, answerQueue });
+const app = await createApp({ store, webRoot: resolve('dist/web'), answerService, answerQueue, mode });
+const commandHandler = new ChatCommandHandler(store, answerQueue);
 const port = Number(process.env.PORT ?? 3001);
 await app.listen({ host: process.env.HOST ?? '127.0.0.1', port });
 console.info(`[Backlog] server listening on ${port}`);
@@ -70,7 +75,7 @@ if (process.env.BACKLOG_REPLAY_FILE) {
   });
 }
 if (chatSource) {
-  void chatSource.start((message) => { pipeline.add(message); }).then(() => {
+  void chatSource.start((message) => { if (!commandHandler.handle(message)) pipeline.add(message); }).then(() => {
     console.info(`[Backlog] chat source finished${process.env.BACKLOG_REPLAY_FILE ? ' replay' : ''}`);
   }).catch((error: unknown) => {
     console.error('[Backlog] chat source failed', error instanceof Error ? error.message : error);

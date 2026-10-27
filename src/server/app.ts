@@ -7,10 +7,11 @@ import type WebSocket from 'ws';
 import { BacklogStore, type AnswerInput } from '../store/store.js';
 import type { SavedAnswerService } from '../answers/service.js';
 import type { SavedAnswerQueue } from '../bot/saved-answer-queue.js';
+import type { BacklogMode } from '../config/mode.js';
 
-interface AppOptions { store: BacklogStore; webRoot?: string; answerService?: SavedAnswerService; answerQueue?: SavedAnswerQueue }
+interface AppOptions { store: BacklogStore; webRoot?: string; answerService?: SavedAnswerService; answerQueue?: SavedAnswerQueue; mode?: BacklogMode }
 
-export async function createApp({ store, webRoot, answerService, answerQueue }: AppOptions): Promise<FastifyInstance> {
+export async function createApp({ store, webRoot, answerService, answerQueue, mode = 'demo' }: AppOptions): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
   await app.register(websocket);
   if (webRoot && existsSync(resolve(webRoot, 'index.html'))) {
@@ -40,6 +41,7 @@ export async function createApp({ store, webRoot, answerService, answerQueue }: 
   });
 
   app.get('/api/queue', async () => queueSnapshot());
+  app.get('/api/status', async () => ({ mode }));
   app.post<{ Params: { id: string }; Body?: { answerId?: string } }>('/api/items/:id/answered', async (request, reply) => {
     const question = store.getQueue().find((item) => item.id === request.params.id);
     if (!question) return reply.code(404).send({ error: 'Question not found' });
@@ -51,7 +53,9 @@ export async function createApp({ store, webRoot, answerService, answerQueue }: 
     if (answerId) {
       if (!store.getAnswer(answerId)) return reply.code(404).send({ error: 'Saved answer not found' });
       if (!answerQueue) return reply.code(503).send({ error: 'Chat sending is not configured' });
-      if (!answerQueue.enqueueSavedAnswer(answerId)) return reply.code(404).send({ error: 'Saved answer not found' });
+      const askers = [...question.askers];
+      const notice = { type: 'answered-askers' as const, userLogins: askers };
+      if (!answerQueue.enqueueSavedAnswer(answerId, notice)) return reply.code(404).send({ error: 'Saved answer not found' });
     }
     store.setAnswered(request.params.id, answerId);
     return { ok: true, queuedForChat: Boolean(answerId) };

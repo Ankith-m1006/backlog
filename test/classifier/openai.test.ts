@@ -13,7 +13,7 @@ describe('classify', () => {
     const result = await classify(messages, { apiKey: 'test-key', fetchImpl: fetchImpl as unknown as typeof fetch });
     expect(result).toEqual([{ id: 'm1', isQuestion: true, normalized: 'How to find the blue key', topicKey: 'blue key location' }]);
     const request = JSON.parse(String(fetchImpl.mock.calls[0]?.[1]?.body));
-    expect(request.model).toBe('gpt-4.1-mini');
+    expect(request.model).toBe('gpt-6-luna');
     expect(request.response_format.json_schema.strict).toBe(true);
     expect(fetchImpl).toHaveBeenCalledOnce();
   });

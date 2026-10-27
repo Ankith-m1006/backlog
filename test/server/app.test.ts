@@ -43,13 +43,15 @@ describe('Fastify API', () => {
     store = new BacklogStore(); store.upsertQuestion(question);
     const saved = store.createAnswer({ question: 'Where is the blue key?', answer: 'In the northern tower.' });
     const send = vi.fn().mockResolvedValue(undefined);
-    const answerQueue = new SavedAnswerQueue(store, { send });
+    const sendTemplate = vi.fn().mockResolvedValue(undefined);
+    const answerQueue = new SavedAnswerQueue(store, { sendSavedAnswer: send, sendTemplate }, { intervalMs: 1 });
     app = await createApp({ store, answerQueue });
     const rejected = await app.inject({ method: 'POST', url: '/api/items/q1/answered', payload: { answer: 'invented text' } });
     expect(rejected.statusCode).toBe(400);
     const accepted = await app.inject({ method: 'POST', url: '/api/items/q1/answered', payload: { answerId: saved.id } });
     expect(accepted.json()).toEqual({ ok: true, queuedForChat: true });
     await vi.waitFor(() => expect(send).toHaveBeenCalledWith(expect.objectContaining({ id: saved.id, answer: 'In the northern tower.' })));
+    await vi.waitFor(() => expect(sendTemplate).toHaveBeenCalledWith({ type: 'answered-askers', userLogins: ['alice', 'bob'] }));
     expect(store.getQueue()).toHaveLength(0);
   });
 

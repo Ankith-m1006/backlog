@@ -13,6 +13,9 @@ a { color: inherit; text-decoration: none; }
 .app-header nav .nav-active { color: #252d3c; font-weight: 700; }
 .app-header nav .nav-active::after { content: ''; height: 2px; background: #ed785a; position: absolute; bottom: 0; left: 0; right: 0; }
 .header-status { margin-left: auto; display: flex; align-items: center; gap: 12px; color: #87909d; font-size: 12px; }
+.mode-badge { padding: 6px 9px; border-radius: 7px; font-size: 9px; font-weight: 800; letter-spacing: .7px; }
+.mode-badge.demo { color: #805d1b; border: 1px solid #f0dfaa; background: #fff9e8; }
+.mode-badge.live { color: #287c5e; border: 1px solid #d7efe5; background: #f3fbf7; }
 .live-pill { display: inline-flex; align-items: center; gap: 7px; padding: 6px 10px; border: 1px solid #d7efe5; border-radius: 99px; color: #287c5e; background: #f3fbf7; font-size: 10px; font-weight: 800; letter-spacing: .8px; }
 .live-pill i { display: block; width: 6px; height: 6px; border-radius: 50%; background: #35b47c; box-shadow: 0 0 0 3px #35b47c22; }
 .control-wrap { max-width: 1440px; margin: 0 auto; padding: 54px 40px 26px; }

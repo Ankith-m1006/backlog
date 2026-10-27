@@ -50,7 +50,7 @@ export async function classify(messages: ChatMessage[], options: ClassifyOptions
     method: 'POST',
     headers: { Authorization: `Bearer ${options.apiKey}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      model: options.model ?? 'gpt-4.1-mini', temperature: 0,
+      model: options.model ?? process.env.OPENAI_MODEL ?? 'gpt-6-luna', temperature: 0,
       response_format: { type: 'json_schema', json_schema: schema },
       messages: [
         { role: 'system', content: 'Identify genuine questions asking the streamer for information. Ignore banter, spam, emote walls, rhetorical remarks, and commands. When a question asks the same thing as an open queue item, reuse that item’s topicKey even if the wording differs; invent a new topicKey only for a genuinely new question. Return only the required JSON. For non-questions, use empty normalized and topicKey strings. Never answer the questions.' },

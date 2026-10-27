@@ -12,7 +12,7 @@ describe('SavedAnswerQueue', () => {
     const first = store.createAnswer({ question: 'Where is the key?', answer: 'At the tower.' });
     const second = store.createAnswer({ question: 'What is the code?', answer: 'The code is 1234.' });
     const send = vi.fn().mockResolvedValue(undefined);
-    const queue = new SavedAnswerQueue(store, { send }, { intervalMs: 10_000 });
+    const queue = new SavedAnswerQueue(store, { sendSavedAnswer: send, sendTemplate: vi.fn() }, { intervalMs: 10_000 });
     expect(queue.enqueueSavedAnswer('not-saved')).toBe(false);
     expect(queue.enqueueSavedAnswer(first.id)).toBe(true);
     await Promise.resolve(); expect(send).toHaveBeenCalledOnce();
@@ -29,10 +29,10 @@ describe('SavedAnswerQueue', () => {
     const second = store.createAnswer({ question: 'Q2?', answer: 'Saved text two.' });
     const send = vi.fn();
     let release: (() => void) | undefined;
-    const queue = new SavedAnswerQueue(store, { send: async (answer) => {
+    const queue = new SavedAnswerQueue(store, { sendSavedAnswer: async (answer) => {
       send(answer);
       if (answer.id === first.id) await new Promise<void>((resolve) => { release = resolve; });
-    } });
+    }, sendTemplate: vi.fn() });
     queue.enqueueSavedAnswer(first.id); await vi.waitFor(() => expect(release).toBeDefined());
     queue.enqueueSavedAnswer(second.id); store.deleteAnswer(second.id); release?.();
     await vi.advanceTimersByTimeAsync(10_000); await vi.waitFor(() => expect(queue.pending).toBe(0));
