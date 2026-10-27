@@ -41,6 +41,19 @@ export class QuestionMerger {
     return question;
   }
 
+  mergeInto(id: string, message: ChatMessage): QueueQuestion | undefined {
+    const question = [...this.questions.values()].find((item) => item.id === id && item.channel.toLowerCase() === message.channel.toLowerCase());
+    if (!question) return undefined;
+    question.count += 1;
+    if (!question.askers.includes(message.userLogin)) question.askers.push(message.userLogin);
+    question.updatedAt = message.sentAt;
+    return question;
+  }
+
+  recent(limit = 30): QueueQuestion[] {
+    return this.list().sort((left, right) => right.updatedAt.localeCompare(left.updatedAt)).slice(0, limit);
+  }
+
   list(): QueueQuestion[] {
     return [...this.questions.values()].map((question) => ({ ...question, askers: [...question.askers] }));
   }

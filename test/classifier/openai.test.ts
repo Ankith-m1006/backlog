@@ -18,6 +18,16 @@ describe('classify', () => {
     expect(fetchImpl).toHaveBeenCalledOnce();
   });
 
+  it('includes up to 30 open queue items as context for topic-key reuse', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(mockResponse([{ id: 'm1', isQuestion: true, normalized: 'blue key location', topicKey: 'blue-key' }]));
+    const openItems = Array.from({ length: 31 }, (_, index) => ({ topicKey: `topic-${index}`, normalized: `question ${index}` }));
+    await classify(messages, { apiKey: 'test-key', fetchImpl: fetchImpl as unknown as typeof fetch }, openItems);
+    const request = JSON.parse(String(fetchImpl.mock.calls[0]?.[1]?.body));
+    const promptData = JSON.parse(request.messages[1].content);
+    expect(promptData.openItems).toHaveLength(30);
+    expect(request.messages[0].content).toContain('reuse that item');
+  });
+
   it('clears normalized fields for non-questions', async () => {
     const fetchImpl = vi.fn().mockResolvedValue(mockResponse([{ id: 'm1', isQuestion: false, normalized: 'ignored', topicKey: 'ignored' }]));
     expect(await classify(messages, { apiKey: 'test', fetchImpl: fetchImpl as unknown as typeof fetch })).toEqual([{ id: 'm1', isQuestion: false, normalized: '', topicKey: '' }]);
