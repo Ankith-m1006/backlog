@@ -11,17 +11,26 @@ It groups repeats and suggests only answers the streamer has saved.
 
 Requirements: Node.js 22 or newer and pnpm.
 
-1. Create a Twitch application in the Twitch Developer Console. Set the OAuth redirect URL to `http://localhost:3001/auth/twitch/callback` if you use an external OAuth helper; this build currently accepts configured tokens from the environment and does not implement the login/callback flow.
-2. Create a bot account. Authorize the bot user token with `user:read:chat` and `user:write:chat`. Configure a streamer/broadcaster token with the EventSub chat permission required for the channel. The current single `TWITCH_ACCESS_TOKEN` setting is used for both EventSub subscription and Helix chat sending, so use a token accepted for both during a live setup.
-3. Copy `.env.example` to `.env` and fill the Twitch client ID/secret, access token, broadcaster and bot user IDs, bot username, channel, and `OPENAI_API_KEY` for live mode. Keep `.env` private.
-4. Install and build:
+1. Create a Twitch application in the Twitch Developer Console and copy its client ID and client secret. Backlog uses Twitch's Device Code Grant Flow, so no callback URL or callback server is needed.
+2. Copy `.env.example` to `.env` and set `TWITCH_CLIENT_ID` and `TWITCH_CLIENT_SECRET`. The secret can be omitted if the app is registered as a public client. Keep `.env` private.
+3. Authorize the broadcaster and bot separately. Sign into the broadcaster account when prompted by the first command, then the bot account for the second:
+
+   ```sh
+   pnpm auth streamer
+   pnpm auth bot
+   ```
+
+   The streamer grant requests `user:read:chat`; the bot grant requests `user:read:chat` and `user:write:chat`. Enter the displayed code at Twitch's verification URL. Backlog validates and prints the Twitch login, then stores tokens and rotating refresh tokens in `.tokens/`, which Git ignores. The server refreshes tokens shortly before expiry and persists each rotated refresh token.
+
+4. Set `CHANNEL` and `OPENAI_API_KEY` in `.env` for live mode. `TWITCH_BROADCASTER_USER_ID`, `BOT_USER_ID`, and `BOT_USERNAME` can be omitted when the matching device-code token files exist; Backlog reads these identities from Twitch. Keep `TWITCH_ACCESS_TOKEN` blank unless using it as a legacy fallback.
+5. Install and build:
 
    ```sh
    pnpm install
    pnpm build:web
    ```
 
-The app currently uses the token values in `.env`; streamer OAuth login and token refresh are not implemented yet.
+Token files are local credentials. Do not copy or commit `.tokens/`.
 
 ## Run
 
@@ -84,7 +93,7 @@ flowchart LR
 - Backlog does not generate answers. It suggests a saved answer only above the configured embedding threshold, and the bot sends only a saved answer selected by ID.
 - Demo embeddings are local word-hash vectors. They are not semantic embeddings and demo mode is blocked from evaluation.
 - Real evaluation depends on the channel mix and the quality of human labels. Duplicate pair accuracy is calculated over labelled question pairs.
-- The current build has no OAuth login/callback or token refresh flow. Live access tokens must be configured outside the app.
+- Twitch's Device Code Grant Flow is used by the local CLI; it does not require a callback server. Revoked or expired refresh tokens require running `pnpm auth <streamer|bot>` again.
 - The recorder stores message text and pseudonymous user labels, not Twitch usernames or IDs. Avoid recording private information in public chat; captured files are local data and are not uploaded by the recorder.
 - Twitch and OpenAI availability, API limits, and model pricing can change.
 

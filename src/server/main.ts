@@ -14,8 +14,31 @@ import { SavedAnswerQueue } from '../bot/saved-answer-queue.js';
 import { getBacklogMode } from '../config/mode.js';
 import { createApp } from './app.js';
 import { loadEnvFile } from '../config/env.js';
+import { getStoredAccessToken, readStoredToken, startTokenRefresh, type AuthOptions } from '../auth/tokens.js';
 
 await loadEnvFile();
+
+const authOptions: AuthOptions = {
+  clientId: process.env.TWITCH_CLIENT_ID ?? '',
+  ...(process.env.TWITCH_CLIENT_SECRET ? { clientSecret: process.env.TWITCH_CLIENT_SECRET } : {}),
+};
+const storedTokens = authOptions.clientId ? await Promise.all([
+  getStoredAccessToken('streamer', authOptions), getStoredAccessToken('bot', authOptions),
+]) : [undefined, undefined];
+const botIdentity = authOptions.clientId ? await readStoredToken('bot') : undefined;
+const streamerIdentity = authOptions.clientId ? await readStoredToken('streamer') : undefined;
+if (streamerIdentity && process.env.TWITCH_BROADCASTER_USER_ID && streamerIdentity.userId !== process.env.TWITCH_BROADCASTER_USER_ID) {
+  throw new Error(`Streamer token belongs to ${streamerIdentity.login} (${streamerIdentity.userId}), not TWITCH_BROADCASTER_USER_ID`);
+}
+const streamerToken = storedTokens[0] ?? process.env.TWITCH_ACCESS_TOKEN;
+const botToken = storedTokens[1] ?? process.env.TWITCH_ACCESS_TOKEN;
+const broadcasterUserId = process.env.TWITCH_BROADCASTER_USER_ID ?? streamerIdentity?.userId ?? '';
+const tokenRefreshStops = authOptions.clientId ? [
+  startTokenRefresh('streamer', authOptions, (error) => console.error('[Backlog] streamer token refresh failed', error.message)),
+  startTokenRefresh('bot', authOptions, (error) => console.error('[Backlog] bot token refresh failed', error.message)),
+] : [];
+const botUserId = botIdentity?.userId ?? process.env.BOT_USER_ID ?? '';
+const botUsername = botIdentity?.login ?? process.env.BOT_USERNAME ?? '';
 
 const dbPath = resolve(process.env.BACKLOG_DB_PATH ?? 'data/backlog.sqlite');
 await mkdir(dirname(dbPath), { recursive: true });
@@ -55,10 +78,11 @@ const answerService = new SavedAnswerService(store, {
   ...(demoMode ? { embed: demoEmbed } : {}),
   onError: (error) => console.error('[Backlog] answer matching unavailable', error.message),
 });
-const answerQueue = process.env.TWITCH_ACCESS_TOKEN && process.env.TWITCH_CLIENT_ID && process.env.TWITCH_BROADCASTER_USER_ID && process.env.BOT_USER_ID
+const answerQueue = botToken && process.env.TWITCH_CLIENT_ID && broadcasterUserId && botUserId
   ? new SavedAnswerQueue(store, new HelixChatSender({
-    accessToken: process.env.TWITCH_ACCESS_TOKEN, clientId: process.env.TWITCH_CLIENT_ID,
-    broadcasterId: process.env.TWITCH_BROADCASTER_USER_ID, botUserId: process.env.BOT_USER_ID,
+    accessToken: botToken, getAccessToken: async () => await getStoredAccessToken('bot', authOptions) ?? process.env.TWITCH_ACCESS_TOKEN ?? botToken,
+    clientId: process.env.TWITCH_CLIENT_ID,
+    broadcasterId: broadcasterUserId, botUserId,
   }), { onError: (error) => console.error('[Backlog] saved answer send failed', error.message) })
   : undefined;
 const app = await createApp({ store, webRoot: resolve('dist/web'), answerService, answerQueue, mode });
@@ -70,11 +94,13 @@ console.info(`[Backlog] server listening on ${port}`);
 let chatSource: ChatSource | undefined;
 if (process.env.BACKLOG_REPLAY_FILE) {
   chatSource = new ReplayChatSource(process.env.BACKLOG_REPLAY_FILE, process.env.CHANNEL ?? 'streamer', Number(process.env.REPLAY_SPEED ?? 1));
-} else if (process.env.TWITCH_ACCESS_TOKEN && process.env.TWITCH_BROADCASTER_USER_ID && process.env.BOT_USER_ID && process.env.TWITCH_CLIENT_ID && process.env.CHANNEL && process.env.BOT_USERNAME) {
+} else if (streamerToken && broadcasterUserId && botUserId && process.env.TWITCH_CLIENT_ID && process.env.CHANNEL && botUsername) {
   chatSource = new EventSubChatSource({
-    clientId: process.env.TWITCH_CLIENT_ID, accessToken: process.env.TWITCH_ACCESS_TOKEN,
-    broadcasterUserId: process.env.TWITCH_BROADCASTER_USER_ID, botUserId: process.env.BOT_USER_ID,
-    channel: process.env.CHANNEL, botUsername: process.env.BOT_USERNAME,
+    clientId: process.env.TWITCH_CLIENT_ID, accessToken: streamerToken,
+    getAccessToken: async () => await getStoredAccessToken('streamer', authOptions) ?? process.env.TWITCH_ACCESS_TOKEN ?? streamerToken,
+    broadcasterUserId, botUserId,
+    chatReaderUserId: streamerIdentity?.userId ?? broadcasterUserId,
+    channel: process.env.CHANNEL, botUsername,
   });
 }
 if (chatSource) {
@@ -87,6 +113,7 @@ if (chatSource) {
 }
 
 const shutdown = async (): Promise<void> => {
+  tokenRefreshStops.forEach((stop) => stop());
   pipeline.stop();
   await chatSource?.stop();
   await app.close();

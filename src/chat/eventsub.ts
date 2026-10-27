@@ -3,10 +3,12 @@ import type { ChatMessage, ChatSource } from './types.js';
 interface EventSubOptions {
   clientId: string;
   accessToken: string;
+  getAccessToken?: () => Promise<string>;
   broadcasterUserId: string;
   channel: string;
   botUsername: string;
   botUserId: string;
+  chatReaderUserId?: string;
 }
 
 type SocketLike = WebSocket;
@@ -102,10 +104,11 @@ export class EventSubChatSource implements ChatSource {
   }
 
   private async createSubscription(sessionId: string): Promise<void> {
+    const accessToken = this.options.getAccessToken ? await this.options.getAccessToken() : this.options.accessToken;
     const response = await fetch('https://api.twitch.tv/helix/eventsub/subscriptions', {
       method: 'POST',
-      headers: { Authorization: `Bearer ${this.options.accessToken}`, 'Client-Id': this.options.clientId, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type: 'channel.chat.message', version: '1', condition: { broadcaster_user_id: this.options.broadcasterUserId, user_id: this.options.botUserId }, transport: { method: 'websocket', session_id: sessionId } }),
+      headers: { Authorization: `Bearer ${accessToken}`, 'Client-Id': this.options.clientId, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'channel.chat.message', version: '1', condition: { broadcaster_user_id: this.options.broadcasterUserId, user_id: this.options.chatReaderUserId ?? this.options.botUserId }, transport: { method: 'websocket', session_id: sessionId } }),
     });
     if (!response.ok) throw new Error(`EventSub subscription failed (${response.status})`);
   }

@@ -4,6 +4,7 @@ import { renderBotTemplate, type BotTemplate } from './messages.js';
 interface HelixSenderOptions {
   clientId: string;
   accessToken: string;
+  getAccessToken?: () => Promise<string>;
   broadcasterId: string;
   botUserId: string;
   fetchImpl?: typeof fetch;
@@ -26,10 +27,11 @@ export class HelixChatSender implements OutgoingChatSender {
   }
 
   private async post(message: string): Promise<void> {
+    const accessToken = this.options.getAccessToken ? await this.options.getAccessToken() : this.options.accessToken;
     const response = await (this.options.fetchImpl ?? fetch)('https://api.twitch.tv/helix/chat/messages', {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${this.options.accessToken}`,
+        Authorization: `Bearer ${accessToken}`,
         'Client-Id': this.options.clientId,
         'Content-Type': 'application/json',
       },
