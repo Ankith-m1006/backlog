@@ -7,6 +7,9 @@ import { QuestionPipeline } from '../classifier/pipeline.js';
 import type { Classification } from '../classifier/openai.js';
 import type { ChatMessage } from '../chat/types.js';
 import { BacklogStore } from '../store/store.js';
+import { SavedAnswerService } from '../answers/service.js';
+import { HelixChatSender } from '../bot/helix.js';
+import { SavedAnswerQueue } from '../bot/saved-answer-queue.js';
 import { createApp } from './app.js';
 
 const dbPath = resolve(process.env.BACKLOG_DB_PATH ?? 'data/backlog.sqlite');
@@ -39,7 +42,19 @@ const pipeline = new QuestionPipeline({
   onQuestion: (question) => store.upsertQuestion(question),
   onError: (error) => console.error('[Backlog] classification failed', error.message),
 });
-const app = await createApp({ store, webRoot: resolve('dist/web') });
+const answerService = new SavedAnswerService(store, {
+  apiKey: process.env.OPENAI_API_KEY ?? '',
+  threshold: Number(process.env.ANSWER_MATCH_THRESHOLD ?? 0.82),
+  ...(demoMode ? { embed: demoEmbed } : {}),
+  onError: (error) => console.error('[Backlog] answer matching unavailable', error.message),
+});
+const answerQueue = process.env.TWITCH_ACCESS_TOKEN && process.env.TWITCH_CLIENT_ID && process.env.TWITCH_BROADCASTER_USER_ID && process.env.BOT_USER_ID
+  ? new SavedAnswerQueue(store, new HelixChatSender({
+    accessToken: process.env.TWITCH_ACCESS_TOKEN, clientId: process.env.TWITCH_CLIENT_ID,
+    broadcasterId: process.env.TWITCH_BROADCASTER_USER_ID, botUserId: process.env.BOT_USER_ID,
+  }), { onError: (error) => console.error('[Backlog] saved answer send failed', error.message) })
+  : undefined;
+const app = await createApp({ store, webRoot: resolve('dist/web'), answerService, answerQueue });
 const port = Number(process.env.PORT ?? 3001);
 await app.listen({ host: process.env.HOST ?? '127.0.0.1', port });
 console.info(`[Backlog] server listening on ${port}`);

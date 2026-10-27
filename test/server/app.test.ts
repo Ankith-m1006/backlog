@@ -1,8 +1,10 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { BacklogStore } from '../../src/store/store.js';
 import { createApp } from '../../src/server/app.js';
 import type { QueueQuestion } from '../../src/classifier/merge.js';
 import { resolve } from 'node:path';
+import { SavedAnswerQueue } from '../../src/bot/saved-answer-queue.js';
+import { SavedAnswerService } from '../../src/answers/service.js';
 
 let store: BacklogStore | undefined;
 let app: Awaited<ReturnType<typeof createApp>> | undefined;
@@ -35,6 +37,29 @@ describe('Fastify API', () => {
     expect((await app.inject({ method: 'PUT', url: `/api/answers/${id}`, payload: { question: 'Where?', answer: 'There.' } })).statusCode).toBe(200);
     expect((await app.inject({ method: 'DELETE', url: `/api/answers/${id}` })).statusCode).toBe(200);
     expect((await app.inject({ method: 'GET', url: '/api/answers' })).json().answers).toHaveLength(0);
+  });
+
+  it('queues only an existing saved answer when marking a question answered', async () => {
+    store = new BacklogStore(); store.upsertQuestion(question);
+    const saved = store.createAnswer({ question: 'Where is the blue key?', answer: 'In the northern tower.' });
+    const send = vi.fn().mockResolvedValue(undefined);
+    const answerQueue = new SavedAnswerQueue(store, { send });
+    app = await createApp({ store, answerQueue });
+    const rejected = await app.inject({ method: 'POST', url: '/api/items/q1/answered', payload: { answer: 'invented text' } });
+    expect(rejected.statusCode).toBe(400);
+    const accepted = await app.inject({ method: 'POST', url: '/api/items/q1/answered', payload: { answerId: saved.id } });
+    expect(accepted.json()).toEqual({ ok: true, queuedForChat: true });
+    await vi.waitFor(() => expect(send).toHaveBeenCalledWith(expect.objectContaining({ id: saved.id, answer: 'In the northern tower.' })));
+    expect(store.getQueue()).toHaveLength(0);
+  });
+
+  it('returns an embedded saved-answer suggestion and score in queue responses', async () => {
+    store = new BacklogStore(); store.upsertQuestion(question);
+    store.createAnswer({ question: question.normalized, answer: 'Use the lift.', embedding: [1, 0] });
+    const answerService = new SavedAnswerService(store, { apiKey: 'unused', embed: async () => [1, 0] });
+    app = await createApp({ store, answerService });
+    const response = await app.inject({ method: 'GET', url: '/api/queue' });
+    expect(response.json().items[0].suggestedAnswer).toMatchObject({ question: question.normalized, answer: 'Use the lift.', score: 1 });
   });
 
   it('pushes initial and changed queue snapshots over WebSocket', async () => {

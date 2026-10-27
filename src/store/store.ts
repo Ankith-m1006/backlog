@@ -76,7 +76,13 @@ export class BacklogStore extends EventEmitter {
     return items.sort((left, right) => Number(right.pinned) - Number(left.pinned) || right.rankScore - left.rankScore || right.updatedAt.localeCompare(left.updatedAt));
   }
 
-  setAnswered(id: string): boolean { return this.setStatus(id, 'answered'); }
+  setAnswered(id: string, answerId?: string): boolean {
+    const result = this.db.prepare("UPDATE questions SET status = 'answered', answer_id = ? WHERE id = ?").run(answerId ?? null, id);
+    if (result.changes === 0) return false;
+    this.recordEvent('question.answered', id, answerId ? { answerId } : {});
+    this.emit('queueChanged');
+    return true;
+  }
   dismiss(id: string): boolean { return this.setStatus(id, 'dismissed'); }
 
   togglePin(id: string): boolean | undefined {
@@ -97,6 +103,17 @@ export class BacklogStore extends EventEmitter {
       embedding: row.embedding ? JSON.parse(String(row.embedding)) as number[] : null,
       createdAt: String(row.created_at), updatedAt: String(row.updated_at),
     }));
+  }
+
+  getAnswer(id: string): SavedAnswer | undefined {
+    const row = this.db.prepare('SELECT * FROM saved_answers WHERE id = ?').get(id) as Record<string, unknown> | undefined;
+    if (!row) return undefined;
+    return {
+      id: String(row.id), question: String(row.question), answer: String(row.answer),
+      topicKey: row.topic_key === null ? null : String(row.topic_key),
+      embedding: row.embedding ? JSON.parse(String(row.embedding)) as number[] : null,
+      createdAt: String(row.created_at), updatedAt: String(row.updated_at),
+    };
   }
 
   createAnswer(input: AnswerInput): SavedAnswer { return this.writeAnswer(randomUUID(), input); }

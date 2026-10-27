@@ -10,6 +10,7 @@ interface QueueItem {
   askers: string[];
   pinned: boolean;
   rankScore: number;
+  suggestedAnswer: { id: string; question: string; answer: string; score: number } | null;
 }
 interface Answer { id: string; question: string; answer: string; topicKey: string | null }
 interface QueueEnvelope { type: string; items: QueueItem[] }
@@ -109,7 +110,7 @@ function Control(): JSX.Element {
           {items.length === 0 ? <div className="control-empty"><span className="empty-symbol">✳</span><h3>Your queue is clear</h3><p>When chat asks a question, it will show up here.</p></div> : <div className="queue-list">
             {items.map((item, index) => <article className="queue-card" key={item.id}>
               <div className="queue-rank">{String(index + 1).padStart(2, '0')}</div>
-              <div className="queue-content"><div className="queue-meta"><CountBadge count={item.count} />{item.pinned && <span className="pinned-tag">Pinned</span>}</div><h3>{item.normalized || item.text}</h3><p className="asker-line">Asked by {item.askers.map((name) => `@${name}`).join(', ')}</p><div className="queue-actions"><button className="button button-primary" onClick={() => void mutate(`/api/items/${item.id}/answered`)}>Answered</button><button className="button" onClick={() => void mutate(`/api/items/${item.id}/pin`)}>{item.pinned ? 'Unpin' : 'Pin'}</button><button className="button button-quiet" onClick={() => void mutate(`/api/items/${item.id}/dismiss`)}>Dismiss</button></div></div>
+              <div className="queue-content"><div className="queue-meta"><CountBadge count={item.count} />{item.pinned && <span className="pinned-tag">Pinned</span>}</div><h3>{item.normalized || item.text}</h3><p className="asker-line">Asked by {item.askers.map((name) => `@${name}`).join(', ')}</p>{item.suggestedAnswer && <div className="suggested-answer"><div><span>Saved answer</span><strong>{Math.round(item.suggestedAnswer.score * 100)}% match</strong></div><p>{item.suggestedAnswer.answer}</p></div>}<div className="queue-actions"><button className="button button-primary" onClick={() => void mutate(`/api/items/${item.id}/answered`, item.suggestedAnswer ? { answerId: item.suggestedAnswer.id } : undefined)}>{item.suggestedAnswer ? 'Answered · send saved answer' : 'Answered'}</button><button className="button" onClick={() => void mutate(`/api/items/${item.id}/pin`)}>{item.pinned ? 'Unpin' : 'Pin'}</button><button className="button button-quiet" onClick={() => void mutate(`/api/items/${item.id}/dismiss`)}>Dismiss</button></div></div>
             </article>)}
           </div>}
         </section>
