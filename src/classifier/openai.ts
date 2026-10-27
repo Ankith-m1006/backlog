@@ -13,12 +13,14 @@ interface ClassifyOptions {
   model?: string;
   fetchImpl?: typeof fetch;
   guard?: OpenAICallGuard;
+  onUsage?: (usage: { inputTokens: number; outputTokens: number }) => void;
 }
 
 export interface OpenQuestionContext { topicKey: string; normalized: string }
 
 interface OpenAIResponse {
   choices?: Array<{ message?: { content?: string | null } }>;
+  usage?: { total_tokens?: number; prompt_tokens?: number; completion_tokens?: number };
 }
 
 const schema = {
@@ -60,8 +62,9 @@ export async function classify(messages: ChatMessage[], options: ClassifyOptions
   }));
   if (!response.ok) throw new Error(`OpenAI classification failed (${response.status})`);
   const body = await response.json() as OpenAIResponse;
-  const usage = (body as OpenAIResponse & { usage?: { total_tokens?: number } }).usage;
+  const usage = body.usage;
   guard.recordTokens(usage?.total_tokens ?? 0);
+  options.onUsage?.({ inputTokens: usage?.prompt_tokens ?? 0, outputTokens: usage?.completion_tokens ?? 0 });
   const content = body.choices?.[0]?.message?.content;
   if (!content) throw new Error('OpenAI returned an empty classification');
   const parsed = JSON.parse(content) as { results?: Classification[] };

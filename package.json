@@ -11,6 +11,8 @@
     "build:web": "vite build",
     "server": "tsx src/server/main.ts",
     "replay": "tsx src/replay.ts",
+    "record-chat": "tsx src/record-chat.ts",
+    "label": "tsx src/label.ts",
     "eval": "tsx src/eval.ts"
   },
   "pnpm": {
