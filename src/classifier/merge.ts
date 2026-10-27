@@ -9,6 +9,7 @@ export interface QueueQuestion {
   text: string;
   count: number;
   askers: string[];
+  askerCounts: Record<string, number>;
   createdAt: string;
   updatedAt: string;
 }
@@ -23,6 +24,7 @@ export class QuestionMerger {
     if (existing) {
       existing.count += 1;
       if (!existing.askers.includes(message.userLogin)) existing.askers.push(message.userLogin);
+      existing.askerCounts[message.userLogin] = (existing.askerCounts[message.userLogin] ?? 0) + 1;
       existing.updatedAt = message.sentAt;
       return existing;
     }
@@ -34,6 +36,7 @@ export class QuestionMerger {
       text: message.text,
       count: 1,
       askers: [message.userLogin],
+      askerCounts: { [message.userLogin]: 1 },
       createdAt: message.sentAt,
       updatedAt: message.sentAt,
     };
@@ -46,6 +49,7 @@ export class QuestionMerger {
     if (!question) return undefined;
     question.count += 1;
     if (!question.askers.includes(message.userLogin)) question.askers.push(message.userLogin);
+    question.askerCounts[message.userLogin] = (question.askerCounts[message.userLogin] ?? 0) + 1;
     question.updatedAt = message.sentAt;
     return question;
   }
@@ -55,6 +59,6 @@ export class QuestionMerger {
   }
 
   list(): QueueQuestion[] {
-    return [...this.questions.values()].map((question) => ({ ...question, askers: [...question.askers] }));
+    return [...this.questions.values()].map((question) => ({ ...question, askers: [...question.askers], askerCounts: { ...question.askerCounts } }));
   }
 }
