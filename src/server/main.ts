@@ -13,6 +13,9 @@ import { HelixChatSender } from '../bot/helix.js';
 import { SavedAnswerQueue } from '../bot/saved-answer-queue.js';
 import { getBacklogMode } from '../config/mode.js';
 import { createApp } from './app.js';
+import { loadEnvFile } from '../config/env.js';
+
+await loadEnvFile();
 
 const dbPath = resolve(process.env.BACKLOG_DB_PATH ?? 'data/backlog.sqlite');
 await mkdir(dirname(dbPath), { recursive: true });

@@ -10,7 +10,7 @@ if (!channel || !/^[a-z0-9_]{1,25}$/u.test(channel) || !Number.isFinite(minutes)
 }
 const socket = new WebSocket('wss://irc-ws.chat.twitch.tv');
 const messages: IrcChatLine[] = [];
-const target = join('data', 'real', `${channel}-${new Date().toISOString().slice(0, 10)}.jsonl`);
+const target = join('data', 'real', `${channel}-${new Date().toISOString().replace(/[:.]/gu, '-').slice(0, 19)}.jsonl`);
 socket.on('open', () => {
   socket.send(`NICK justinfan${Math.floor(Math.random() * 1_000_000_000)}`);
   socket.send(`JOIN #${channel}`);

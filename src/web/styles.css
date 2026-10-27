@@ -18,6 +18,7 @@ a { color: inherit; text-decoration: none; }
 .mode-badge.live { color: #287c5e; border: 1px solid #d7efe5; background: #f3fbf7; }
 .live-pill { display: inline-flex; align-items: center; gap: 7px; padding: 6px 10px; border: 1px solid #d7efe5; border-radius: 99px; color: #287c5e; background: #f3fbf7; font-size: 10px; font-weight: 800; letter-spacing: .8px; }
 .live-pill i { display: block; width: 6px; height: 6px; border-radius: 50%; background: #35b47c; box-shadow: 0 0 0 3px #35b47c22; }
+.replay-pill { padding: 6px 10px; border: 1px solid #f0dfaa; border-radius: 99px; color: #805d1b; background: #fff9e8; font-size: 10px; font-weight: 800; letter-spacing: .8px; }
 .control-wrap { max-width: 1440px; margin: 0 auto; padding: 54px 40px 26px; }
 .page-intro { display: flex; justify-content: space-between; align-items: end; margin-bottom: 30px; }
 .eyebrow { margin: 0 0 9px; color: #ec795a; font-size: 10px; font-weight: 800; letter-spacing: 1.7px; }
@@ -36,6 +37,7 @@ a { color: inherit; text-decoration: none; }
 .queue-list { padding: 8px 20px 18px; }
 .queue-card { display: grid; grid-template-columns: 40px 1fr; gap: 13px; padding: 19px 4px 18px; border-bottom: 1px solid #eef0f4; animation: appear .28s ease both; }
 .queue-card:last-child { border-bottom: 0; }
+.queue-card.keyboard-selected { border-radius: 10px; background: #fff9f6; box-shadow: inset 3px 0 #e87859; padding-left: 9px; }
 .queue-rank { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 10px; color: #8993a1; background: #f3f5f8; font: 700 12px Manrope, sans-serif; }
 .queue-content { min-width: 0; }
 .queue-meta { display: flex; align-items: center; gap: 8px; min-height: 21px; }
@@ -57,6 +59,9 @@ a { color: inherit; text-decoration: none; }
 .empty-symbol { color: #ed886b; font-size: 30px; line-height: 1; }
 .control-empty h3 { margin: 16px 0 5px; color: #30394a; font: 700 16px Manrope, sans-serif; }
 .control-empty p { margin: 0; font-size: 12px; }
+.control-empty small { margin-top: 12px; color: #a0a7b1; font-size: 10px; }
+.answers-empty { padding: 16px 22px; color: #929aa6; font-size: 11px; line-height: 1.5; }
+kbd { display: inline-grid; place-items: center; min-width: 19px; padding: 2px 5px; border: 1px solid #dfe3e9; border-radius: 4px; background: white; color: #657080; font: 700 9px ui-monospace, monospace; }
 .answers-panel { overflow: hidden; }
 .answer-form { padding: 20px 22px 22px; display: flex; flex-direction: column; }
 .answer-form label { margin-bottom: 7px; color: #626d7d; font-size: 11px; font-weight: 700; }

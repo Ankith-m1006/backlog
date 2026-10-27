@@ -60,10 +60,12 @@ function CountBadge({ count }: { count: number }): JSX.Element {
 
 function Overlay(): JSX.Element {
   const { items, error } = useQueue();
+  const [mode, setMode] = useState<'demo' | 'live'>('demo');
   const visible = items.slice(0, 5);
   const listRef = useRef<HTMLDivElement>(null);
+  useEffect(() => { void api<{ mode: 'demo' | 'live' }>('/api/status').then((status) => setMode(status.mode)).catch(() => undefined); }, []);
   return <main className="overlay-shell">
-    <header className="overlay-header"><span className="brand-mark">B</span><div><p className="eyebrow">STREAMER Q&amp;A</p><h1>Backlog</h1></div><span className="live-pill"><i /> LIVE</span></header>
+    <header className="overlay-header"><span className="brand-mark">B</span><div><p className="eyebrow">STREAMER Q&amp;A</p><h1>Backlog</h1></div><span className={mode === 'demo' ? 'mode-badge demo' : 'live-pill'}>{mode === 'demo' ? 'DEMO REPLAY' : <><i /> LIVE CHAT</>}</span></header>
     {error && <p className="connection-note">{error}</p>}
     {visible.length === 0 ? <section className="overlay-empty"><span className="empty-symbol">✳</span><h2>Chat questions will land here</h2><p>We’ll group repeats so the best questions rise up.</p></section> :
       <div className="overlay-list" ref={listRef} style={{ height: `${visible.length * 130}px` }}>
@@ -79,6 +81,7 @@ function Overlay(): JSX.Element {
 
 function Control(): JSX.Element {
   const { items, error, setError } = useQueue();
+  const [selectedIndex, setSelectedIndex] = useState(0);
   const [answers, setAnswers] = useState<Answer[]>([]);
   const [question, setQuestion] = useState('');
   const [answer, setAnswer] = useState('');
@@ -92,6 +95,23 @@ function Control(): JSX.Element {
     try { await api(url, body ? { method: 'POST', body: JSON.stringify(body) } : { method: 'POST' }); setError(''); }
     catch (cause) { setError(cause instanceof Error ? cause.message : 'Action failed'); }
   };
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent): void => {
+      const target = event.target as HTMLElement | null;
+      if (target && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))) return;
+      if (event.key.toLowerCase() === 'j') { event.preventDefault(); setSelectedIndex((index) => Math.min(Math.max(0, items.length - 1), index + 1)); }
+      else if (event.key.toLowerCase() === 'k') { event.preventDefault(); setSelectedIndex((index) => Math.max(0, index - 1)); }
+      else {
+        const item = items[selectedIndex];
+        if (!item) return;
+        if (event.key.toLowerCase() === 'a') void mutate(`/api/items/${item.id}/answered`, item.suggestedAnswer ? { answerId: item.suggestedAnswer.id } : undefined);
+        else if (event.key.toLowerCase() === 'd') void mutate(`/api/items/${item.id}/dismiss`);
+        else if (event.key.toLowerCase() === 'p') void mutate(`/api/items/${item.id}/pin`);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [items, selectedIndex]);
   const saveAnswer = async (event: FormEvent): Promise<void> => {
     event.preventDefault();
     try {
@@ -102,14 +122,14 @@ function Control(): JSX.Element {
   };
 
   return <main className="control-page">
-    <header className="app-header"><a className="brand" href="/control"><span className="brand-mark">B</span><span>backlog</span></a><nav><a className="nav-active" href="/control">Control room</a><a href="/overlay" target="_blank">Overlay ↗</a></nav><div className="header-status"><span className={`mode-badge ${mode}`}>{mode === 'demo' ? 'DEMO MODE' : 'LIVE MODE'}</span><span className="live-pill"><i /> LIVE</span><span>{mode === 'demo' ? 'Replay connected' : 'Connected to chat'}</span></div></header>
+    <header className="app-header"><a className="brand" href="/control"><span className="brand-mark">B</span><span>backlog</span></a><nav><a className="nav-active" href="/control">Control room</a><a href="/overlay" target="_blank">Overlay ↗</a></nav><div className="header-status"><span className={`mode-badge ${mode}`}>{mode === 'demo' ? 'DEMO MODE' : 'LIVE MODE'}</span>{mode === 'demo' ? <span className="replay-pill">REPLAY</span> : <span className="live-pill"><i /> LIVE</span>}<span>{mode === 'demo' ? 'Replay connected' : 'Connected to chat'}</span></div></header>
     <div className="control-wrap">
       <section className="page-intro"><div><p className="eyebrow">YOUR STREAM, IN SYNC</p><h1>Question queue</h1><p>Keep the good questions moving. Repeats are grouped automatically.</p></div><div className="queue-total"><strong>{items.length}</strong><span>open questions</span></div></section>
       <Toast message={error} />
       <div className="control-grid">
         <section className="queue-panel panel"><div className="panel-heading"><div><h2>Up next</h2><p>Ranked by repeat asks and recency</p></div><span className="subtle-count">{items.length} items</span></div>
-          {items.length === 0 ? <div className="control-empty"><span className="empty-symbol">✳</span><h3>Your queue is clear</h3><p>When chat asks a question, it will show up here.</p></div> : <div className="queue-list">
-            {items.map((item, index) => <article className="queue-card" key={item.id}>
+          {items.length === 0 ? <div className="control-empty"><span className="empty-symbol">✳</span><h3>Your queue is clear</h3><p>When chat asks a question, it will show up here.</p><small>Tip: add a saved answer to speed up familiar questions.</small></div> : <div className="queue-list">
+            {items.map((item, index) => <article className={`queue-card ${index === selectedIndex ? 'keyboard-selected' : ''}`} key={item.id} onMouseEnter={() => setSelectedIndex(index)}>
               <div className="queue-rank">{String(index + 1).padStart(2, '0')}</div>
               <div className="queue-content"><div className="queue-meta"><CountBadge count={item.count} />{item.pinned && <span className="pinned-tag">Pinned</span>}</div><h3>{item.normalized || item.text}</h3><p className="asker-line">Asked by {item.askers.map((name) => `@${name}`).join(', ')}</p>{item.suggestedAnswer && <div className="suggested-answer"><div><span>Saved answer</span><strong>{Math.round(item.suggestedAnswer.score * 100)}% match</strong></div><p>{item.suggestedAnswer.answer}</p></div>}<div className="queue-actions"><button className="button button-primary" onClick={() => void mutate(`/api/items/${item.id}/answered`, item.suggestedAnswer ? { answerId: item.suggestedAnswer.id } : undefined)}>{item.suggestedAnswer ? 'Answered · send saved answer' : 'Answered'}</button><button className="button" onClick={() => void mutate(`/api/items/${item.id}/pin`)}>{item.pinned ? 'Unpin' : 'Pin'}</button><button className="button button-quiet" onClick={() => void mutate(`/api/items/${item.id}/dismiss`)}>Dismiss</button></div></div>
             </article>)}
@@ -117,10 +137,10 @@ function Control(): JSX.Element {
         </section>
         <aside className="answers-panel panel"><div className="panel-heading"><div><h2>Saved answers</h2><p>Your words, ready when chat asks.</p></div><span className="answer-count">{answers.length}</span></div>
           <form className="answer-form" onSubmit={(event) => void saveAnswer(event)}><label htmlFor="answer-question">Question</label><input id="answer-question" value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="e.g. What sensitivity do you use?" required /><label htmlFor="answer-text">Your answer</label><textarea id="answer-text" value={answer} onChange={(event) => setAnswer(event.target.value)} placeholder="Write the answer you want Backlog to remember…" rows={4} required /><div className="form-actions"><button className="button button-primary" type="submit">{editingId ? 'Update answer' : 'Save answer'}</button>{editingId && <button className="button" type="button" onClick={() => { setEditingId(''); setQuestion(''); setAnswer(''); }}>Cancel</button>}{saved && <span className="saved-note">Saved</span>}</div></form>
-          <div className="saved-list">{answers.map((item) => <article className="saved-answer" key={item.id}><div><h3>{item.question}</h3><p>{item.answer}</p></div><div className="saved-actions"><button className="text-button" onClick={() => { setEditingId(item.id); setQuestion(item.question); setAnswer(item.answer); }}>Edit</button><button className="text-button text-danger" onClick={() => { void api(`/api/answers/${item.id}`, { method: 'DELETE' }).then(refreshAnswers).catch((cause: unknown) => setError(cause instanceof Error ? cause.message : 'Could not delete answer')); }}>Delete</button></div></article>)}</div>
+          <div className="saved-list">{answers.length === 0 ? <p className="answers-empty">No saved answers yet. Add one above and Backlog can suggest it when a similar question appears.</p> : answers.map((item) => <article className="saved-answer" key={item.id}><div><h3>{item.question}</h3><p>{item.answer}</p></div><div className="saved-actions"><button className="text-button" onClick={() => { setEditingId(item.id); setQuestion(item.question); setAnswer(item.answer); }}>Edit</button><button className="text-button text-danger" onClick={() => { void api(`/api/answers/${item.id}`, { method: 'DELETE' }).then(refreshAnswers).catch((cause: unknown) => setError(cause instanceof Error ? cause.message : 'Could not delete answer')); }}>Delete</button></div></article>)}</div>
         </aside>
       </div>
-      <footer className="page-footer"><span>Backlog keeps the conversation in view.</span><span>OBS overlay: <code>/overlay</code></span></footer>
+      <footer className="page-footer"><span>Shortcuts: <kbd>J</kbd>/<kbd>K</kbd> move · <kbd>A</kbd> answered · <kbd>D</kbd> dismiss · <kbd>P</kbd> pin</span><span>OBS overlay: <code>/overlay</code></span></footer>
     </div>
   </main>;
 }
