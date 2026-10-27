@@ -1,13 +1,22 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import websocket from '@fastify/websocket';
+import fastifyStatic from '@fastify/static';
+import { existsSync } from 'node:fs';
+import { resolve } from 'node:path';
 import type WebSocket from 'ws';
 import { BacklogStore, type AnswerInput } from '../store/store.js';
 
-interface AppOptions { store: BacklogStore }
+interface AppOptions { store: BacklogStore; webRoot?: string }
 
-export async function createApp({ store }: AppOptions): Promise<FastifyInstance> {
+export async function createApp({ store, webRoot }: AppOptions): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
   await app.register(websocket);
+  if (webRoot && existsSync(resolve(webRoot, 'index.html'))) {
+    await app.register(fastifyStatic, { root: resolve(webRoot), prefix: '/', wildcard: false });
+    for (const path of ['/overlay', '/control']) {
+      app.get(path, async (_request, reply) => reply.sendFile('index.html'));
+    }
+  }
   const clients = new Set<WebSocket>();
   const broadcast = (): void => {
     const message = JSON.stringify({ type: 'queue', items: store.getQueue() });

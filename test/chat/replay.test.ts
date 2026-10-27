@@ -10,12 +10,14 @@ describe('ReplayChatSource', () => {
   it('emits JSONL rows in order at the offset divided by speed', async () => {
     directory = await mkdtemp(join(tmpdir(), 'backlog-replay-')); const path = join(directory, 'chat.jsonl');
     await writeFile(path, '{"offsetMs":0,"user":"First","text":"hello"}\n{"offsetMs":200,"user":"Mod","text":"welcome","badges":["moderator"]}\n{"offsetMs":500,"user":"Last","text":"gg"}\n');
-    vi.useFakeTimers(); const received: string[] = []; const source = new ReplayChatSource(path, 'streamer', 2);
-    const running = source.start((message) => received.push(message.displayName));
+    vi.useFakeTimers(); vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'));
+    const received: Array<{ name: string; sentAt: string }> = []; const source = new ReplayChatSource(path, 'streamer', 2);
+    const running = source.start((message) => received.push({ name: message.displayName, sentAt: message.sentAt }));
     await vi.waitFor(() => expect(vi.getTimerCount()).toBe(1));
-    await vi.advanceTimersByTimeAsync(1); expect(received).toEqual(['First']);
-    await vi.advanceTimersByTimeAsync(100); expect(received).toEqual(['First', 'Mod']);
+    await vi.advanceTimersByTimeAsync(1); expect(received.map((item) => item.name)).toEqual(['First']);
+    await vi.advanceTimersByTimeAsync(100); expect(received.map((item) => item.name)).toEqual(['First', 'Mod']);
     await vi.advanceTimersByTimeAsync(150); await running;
-    expect(received).toEqual(['First', 'Mod', 'Last']);
+    expect(received.map((item) => item.name)).toEqual(['First', 'Mod', 'Last']);
+    expect(received[2]?.sentAt).toBe('2026-01-01T00:00:00.500Z');
   });
 });

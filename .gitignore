@@ -5,3 +5,4 @@ coverage/
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal
+data/*.sqlite

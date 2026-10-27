@@ -6,5 +6,5 @@ export default tseslint.config(
   { ignores: ['node_modules/**', 'dist/**', 'coverage/**'] },
   eslint.configs.recommended,
   ...tseslint.configs.recommended,
-  { files: ['**/*.ts'], languageOptions: { globals: { ...globals.node, ...globals.vitest } } },
+  { files: ['**/*.ts', '**/*.tsx'], languageOptions: { globals: { ...globals.node, ...globals.vitest } } },
 );

@@ -13,6 +13,7 @@ export class ReplayChatSource implements ChatSource {
 
   async start(onMessage: (message: ChatMessage) => void): Promise<void> {
     this.stopped = false;
+    const replayStartedAt = Date.now();
     const content = await readFile(this.filePath, 'utf8');
     const lines = content.split(/\r?\n/u).filter((line) => line.trim()).map((line) => JSON.parse(line) as ReplayLine);
     let previousOffset = 0;
@@ -21,7 +22,7 @@ export class ReplayChatSource implements ChatSource {
       await new Promise<void>((resolve) => {
         const timer = setTimeout(() => {
           this.timers.delete(timer);
-          if (!this.stopped) onMessage(this.toMessage(line, index));
+          if (!this.stopped) onMessage(this.toMessage(line, index, replayStartedAt));
           resolve();
         }, Math.max(0, line.offsetMs - previousOffset) / this.speed);
         this.timers.add(timer);
@@ -36,14 +37,14 @@ export class ReplayChatSource implements ChatSource {
     this.timers.clear();
   }
 
-  private toMessage(line: ReplayLine, index: number): ChatMessage {
+  private toMessage(line: ReplayLine, index: number, replayStartedAt: number): ChatMessage {
     const login = line.user.toLowerCase().replace(/[^a-z0-9_]/gu, '_');
     const badges = line.badges ?? [];
     return {
       id: `replay-${index + 1}`, channel: this.channel, userId: `replay-user-${login}`,
       userLogin: login, displayName: line.user, text: line.text,
       isMod: badges.includes('moderator'), isBroadcaster: badges.includes('broadcaster'), isBot: false,
-      sentAt: new Date(line.offsetMs).toISOString(),
+      sentAt: new Date(replayStartedAt + line.offsetMs).toISOString(),
     };
   }
 }

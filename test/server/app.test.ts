@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { BacklogStore } from '../../src/store/store.js';
 import { createApp } from '../../src/server/app.js';
 import type { QueueQuestion } from '../../src/classifier/merge.js';
+import { resolve } from 'node:path';
 
 let store: BacklogStore | undefined;
 let app: Awaited<ReturnType<typeof createApp>> | undefined;
@@ -46,5 +47,14 @@ describe('Fastify API', () => {
     const changed = receive(); store.upsertQuestion(question);
     expect((await changed).items.map((item) => item.id)).toEqual(['q1']);
     socket.close();
+  });
+
+  it('serves the React page at both product routes when a production bundle is configured', async () => {
+    store = new BacklogStore();
+    app = await createApp({ store, webRoot: resolve('dist/web') });
+    const overlay = await app.inject({ method: 'GET', url: '/overlay' });
+    const control = await app.inject({ method: 'GET', url: '/control' });
+    expect(overlay.statusCode).toBe(200); expect(overlay.body).toContain('/assets/index-');
+    expect(control.statusCode).toBe(200); expect(control.body).toBe(overlay.body);
   });
 });
