@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "engines": { "node": ">=22" },
+  "packageManager": "pnpm@11.13.0",
   "scripts": {
     "lint": "eslint .",
     "test": "vitest run --passWithNoTests",
@@ -11,6 +12,7 @@
     "build:web": "vite build",
     "server": "tsx src/server/main.ts",
     "auth": "tsx src/auth/cli.ts",
+    "doctor": "tsx src/doctor.ts",
     "replay": "tsx src/replay.ts",
     "record-chat": "tsx src/record-chat.ts",
     "label": "tsx src/label.ts",

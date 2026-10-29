@@ -30,6 +30,8 @@ export interface AuthOptions {
   sleep?: (milliseconds: number) => Promise<void>;
   now?: () => number;
   onDeviceCode?: (details: { userCode: string; verificationUri: string }) => void;
+  loadToken?: (role: AuthRole, tokenDir?: string) => Promise<StoredToken | undefined>;
+  saveToken?: (role: AuthRole, token: StoredToken, tokenDir?: string) => Promise<void>;
 }
 
 function tokenPath(role: AuthRole, tokenDir = '.tokens'): string { return join(tokenDir, `${role}.json`); }
@@ -103,7 +105,7 @@ export async function authorizeDevice(role: AuthRole, options: AuthOptions): Pro
     login: identity.login, userId: identity.user_id, scopes: identity.scopes,
     expiresAt: new Date(now() + token.expires_in * 1000).toISOString(),
   };
-  await saveStoredToken(role, stored, options.tokenDir);
+  await (options.saveToken ?? saveStoredToken)(role, stored, options.tokenDir);
   return stored;
 }
 
@@ -120,12 +122,12 @@ async function refreshToken(role: AuthRole, stored: StoredToken, options: AuthOp
     ...stored, accessToken: body.access_token, refreshToken: body.refresh_token ?? stored.refreshToken,
     scopes: body.scope ?? stored.scopes, expiresAt: new Date((options.now ?? Date.now)() + body.expires_in * 1000).toISOString(),
   };
-  await saveStoredToken(role, updated, options.tokenDir);
+  await (options.saveToken ?? saveStoredToken)(role, updated, options.tokenDir);
   return updated;
 }
 
 export async function getStoredAccessToken(role: AuthRole, options: AuthOptions): Promise<string | undefined> {
-  const stored = await readStoredToken(role, options.tokenDir);
+  const stored = await (options.loadToken ?? readStoredToken)(role, options.tokenDir);
   if (!stored) return undefined;
   if (Date.parse(stored.expiresAt) > (options.now ?? Date.now)() + 5 * 60_000) return stored.accessToken;
   return (await refreshToken(role, stored, options)).accessToken;

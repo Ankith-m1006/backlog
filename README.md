@@ -3,13 +3,27 @@
 Backlog turns Twitch chat questions into a ranked queue for streamers.
 It groups repeats and suggests only answers the streamer has saved.
 
+## Quick start (demo, no Twitch needed)
+
+Requirements: Node.js 22 or newer and pnpm.
+
+The repository pins pnpm 11.13.0 through Corepack so bare `pnpm doctor` runs Backlog's readiness checklist.
+
+```sh
+pnpm install
+pnpm build:web
+pnpm replay data/sample-chat.synthetic.jsonl
+```
+
+`pnpm replay` starts the demo server and keeps running. Open [the control page](http://127.0.0.1:3001/control) and [the OBS overlay](http://127.0.0.1:3001/overlay). The synthetic fixture is only for replay demos; demo mode uses local hash embeddings and cannot be used for evaluation.
+
+## Screenshots
+
 ![Backlog control room](docs/screenshots/backlog-control.png)
 
 ![OBS overlay](docs/screenshots/backlog-overlay.png)
 
-## Setup
-
-Requirements: Node.js 22 or newer and pnpm.
+## Live setup
 
 1. Create a Twitch application in the Twitch Developer Console and copy its client ID and client secret. Backlog uses Twitch's Device Code Grant Flow, so no callback URL or callback server is needed.
 2. Copy `.env.example` to `.env` and set `TWITCH_CLIENT_ID` and `TWITCH_CLIENT_SECRET`. The secret can be omitted if the app is registered as a public client. Keep `.env` private.
@@ -23,7 +37,7 @@ Requirements: Node.js 22 or newer and pnpm.
    The streamer grant requests `user:read:chat`; the bot grant requests `user:read:chat` and `user:write:chat`. Enter the displayed code at Twitch's verification URL. Backlog validates and prints the Twitch login, then stores tokens and rotating refresh tokens in `.tokens/`, which Git ignores. The server refreshes tokens shortly before expiry and persists each rotated refresh token.
 
 4. Set `CHANNEL` and `OPENAI_API_KEY` in `.env` for live mode. `TWITCH_BROADCASTER_USER_ID`, `BOT_USER_ID`, and `BOT_USERNAME` can be omitted when the matching device-code token files exist; Backlog reads these identities from Twitch. Keep `TWITCH_ACCESS_TOKEN` blank unless using it as a legacy fallback.
-5. Install and build:
+5. Install dependencies and build the UI:
 
    ```sh
    pnpm install
@@ -32,24 +46,25 @@ Requirements: Node.js 22 or newer and pnpm.
 
 Token files are local credentials. Do not copy or commit `.tokens/`.
 
-## Run
+## Doctor
 
-Demo mode is the default and uses deterministic local demo embeddings. It is for UI previews and cannot be used for evaluation.
+After configuring live credentials, run:
 
 ```sh
-pnpm replay data/sample-chat.synthetic.jsonl
+pnpm doctor
 ```
 
-Open [http://127.0.0.1:3001/control](http://127.0.0.1:3001/control). Open `/overlay` as an OBS browser source. The fixture is synthetic and is only for the replay demo.
+Doctor checks Node.js, `.env`, required configuration, and both token files. It checks token expiry locally and asks Twitch to validate tokens when Twitch is reachable. It only reports whether environment values are set or missing, never their contents.
 
-For live chat, set `BACKLOG_MODE=live`, configure Twitch and OpenAI values in `.env`, set `CHANNEL`, `TWITCH_BROADCASTER_USER_ID`, `BOT_USER_ID`, and `BOT_USERNAME`, then run:
+## Run live chat
+
+Set `BACKLOG_MODE=live` in `.env`, then run:
 
 ```sh
-pnpm build:web
 pnpm server
 ```
 
-The cost guard defaults to 30 OpenAI calls per minute; change `OPENAI_MAX_CALLS_PER_MINUTE` if needed. The logs report token use. Bot chat messages share a queue capped at one message per 10 seconds.
+The cost guard defaults to 30 OpenAI calls per minute; change `OPENAI_MAX_CALLS_PER_MINUTE` if needed. Logs report token use. Bot chat messages share a queue capped at one message per 10 seconds.
 
 ## Record, label, evaluate
 
@@ -67,7 +82,7 @@ $env:BACKLOG_MODE='live' # PowerShell; use BACKLOG_MODE=live in POSIX shells
 pnpm eval
 ```
 
-The report is written to `docs/EVAL.md`. It compares the rules-only prefilter, a classifier without cross-batch context, and full Backlog. The repository does not contain real chat or human labels; do not treat the synthetic replay as evaluation data. `pnpm eval` refuses demo mode.
+The report is written to `docs/EVAL.md`. It compares the rules-only prefilter, a classifier without cross-batch context, and full Backlog. The repository does not contain real chat or human labels; do not treat synthetic replay as evaluation data. `pnpm eval` refuses demo mode.
 
 ## Architecture
 
@@ -92,9 +107,9 @@ flowchart LR
 
 - Backlog does not generate answers. It suggests a saved answer only above the configured embedding threshold, and the bot sends only a saved answer selected by ID.
 - Demo embeddings are local word-hash vectors. They are not semantic embeddings and demo mode is blocked from evaluation.
-- Real evaluation depends on the channel mix and the quality of human labels. Duplicate pair accuracy is calculated over labelled question pairs.
+- Real evaluation depends on the channel mix and quality of human labels. Duplicate pair accuracy is calculated over labelled question pairs.
 - Twitch's Device Code Grant Flow is used by the local CLI; it does not require a callback server. Revoked or expired refresh tokens require running `pnpm auth <streamer|bot>` again.
-- The recorder stores message text and pseudonymous user labels, not Twitch usernames or IDs. Avoid recording private information in public chat; captured files are local data and are not uploaded by the recorder.
+- The recorder stores message text and pseudonymous user labels, not Twitch usernames or IDs. Avoid recording private information in public chat; captures are local and are not uploaded by the recorder.
 - Twitch and OpenAI availability, API limits, and model pricing can change.
 
 ## Development
