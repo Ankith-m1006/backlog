@@ -11,3 +11,8 @@ data/*.sqlite
 *.pem
 *.key
 *.p12
+
+docs/video/raw/
+docs/video/*.mp4
+docs/video/v*.mp4
+docs/video/list.txt

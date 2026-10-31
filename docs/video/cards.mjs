@@ -1,0 +1,13 @@
+import { createRequire } from "node:module";
+import path from "node:path";
+const require = createRequire(import.meta.url);
+const { chromium } = require("C:/Users/ankit/.vscode/extensions/danielsanmedium.dscodegpt-3.24.79/standalone/node_modules/patchright");
+const here = path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1"));
+const browser = await chromium.launch({ headless: true, channel: "chrome" });
+const page = await (await browser.newContext({ viewport: { width: 1280, height: 720 } })).newPage();
+for (const n of [1, 2, 3, 4, 5]) {
+  await page.goto("file:///" + path.join(here, "cards", `c${n}.html`).split(path.sep).join("/"));
+  await page.waitForTimeout(1800);
+  await page.screenshot({ path: path.join(here, `card${n}.png`) });
+}
+await browser.close();

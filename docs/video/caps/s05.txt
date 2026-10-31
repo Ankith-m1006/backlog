@@ -1,0 +1,1 @@
+Streamer clicks Send. The bot replies in chat with the saved answer

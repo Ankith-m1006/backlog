@@ -1,0 +1,13 @@
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+Condensed:wght@600;700&display=swap');
+:root{--paper:#F4F1EA;--ink:#16130F;--rule:#D9D3C7;--signal:#FFD60A;--muted:#6b655c}
+*{box-sizing:border-box;margin:0}
+html,body{width:1280px;height:720px;background:var(--paper);color:var(--ink);font-family:'IBM Plex Sans Condensed',sans-serif;overflow:hidden}
+.wrap{padding:88px 110px;height:100%;display:flex;flex-direction:column;justify-content:center;gap:26px}
+.mono{font-family:'IBM Plex Mono',monospace}
+.kicker{font:600 15px 'IBM Plex Mono',monospace;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+h1{font-size:76px;line-height:1.02;font-weight:700;letter-spacing:-.01em}
+h2{font-size:52px;line-height:1.05;font-weight:700}
+p.lead{font:400 22px 'IBM Plex Mono',monospace;line-height:1.55;color:#3a352e;max-width:980px}
+mark{background:var(--signal);padding:0 .12em}
+.ticket{border:1px solid var(--rule);background:#fffdf7;padding:16px 20px;border-left:6px solid var(--signal)}
+.rule{height:1px;background:var(--rule)}
