@@ -8,10 +8,11 @@ import { BacklogStore, type AnswerInput } from '../store/store.js';
 import type { SavedAnswerService } from '../answers/service.js';
 import type { SavedAnswerQueue } from '../bot/saved-answer-queue.js';
 import type { BacklogMode } from '../config/mode.js';
+import type { ChatStats } from '../classifier/pipeline.js';
 
-interface AppOptions { store: BacklogStore; webRoot?: string; answerService?: SavedAnswerService; answerQueue?: SavedAnswerQueue; mode?: BacklogMode }
+interface AppOptions { store: BacklogStore; webRoot?: string; answerService?: SavedAnswerService; answerQueue?: SavedAnswerQueue; mode?: BacklogMode; stats?: () => ChatStats }
 
-export async function createApp({ store, webRoot, answerService, answerQueue, mode = 'demo' }: AppOptions): Promise<FastifyInstance> {
+export async function createApp({ store, webRoot, answerService, answerQueue, mode = 'demo', stats }: AppOptions): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
   await app.register(websocket);
   if (webRoot && existsSync(resolve(webRoot, 'index.html'))) {
@@ -21,8 +22,9 @@ export async function createApp({ store, webRoot, answerService, answerQueue, mo
     }
   }
   const clients = new Set<WebSocket>();
-  const queueSnapshot = async (): Promise<{ type: string; items: unknown[] }> => ({
-    type: 'queue',
+  const currentStats = (): ChatStats | null => stats?.() ?? null;
+  const queueSnapshot = async (): Promise<{ type: string; items: unknown[]; stats: ChatStats | null }> => ({
+    type: 'queue', stats: currentStats(),
     items: answerService ? await answerService.suggestMany(store.getQueue()) : store.getQueue().map((item) => ({ ...item, suggestedAnswer: null })),
   });
   const broadcast = (): void => {
@@ -32,6 +34,11 @@ export async function createApp({ store, webRoot, answerService, answerQueue, mo
     }).catch((error: unknown) => app.log.error(error));
   };
   store.on('queueChanged', broadcast);
+  const broadcastStats = (): void => {
+    const message = JSON.stringify({ type: 'stats', stats: currentStats() });
+    for (const client of clients) if (client.readyState === 1) client.send(message);
+  };
+  store.on('statsChanged', broadcastStats);
 
   app.get('/ws', { websocket: true }, (socket) => {
     clients.add(socket);
@@ -41,7 +48,7 @@ export async function createApp({ store, webRoot, answerService, answerQueue, mo
   });
 
   app.get('/api/queue', async () => queueSnapshot());
-  app.get('/api/status', async () => ({ mode }));
+  app.get('/api/status', async () => ({ mode, stats: currentStats() }));
   app.post<{ Params: { id: string }; Body?: { answerId?: string } }>('/api/items/:id/answered', async (request, reply) => {
     const question = store.getQueue().find((item) => item.id === request.params.id);
     if (!question) return reply.code(404).send({ error: 'Question not found' });
@@ -85,7 +92,7 @@ export async function createApp({ store, webRoot, answerService, answerQueue, mo
     return { ok: true };
   });
 
-  app.addHook('onClose', async () => { store.off('queueChanged', broadcast); clients.clear(); });
+  app.addHook('onClose', async () => { store.off('queueChanged', broadcast); store.off('statsChanged', broadcastStats); clients.clear(); });
   return app;
 }
 

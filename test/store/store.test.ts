@@ -21,6 +21,21 @@ describe('BacklogStore', () => {
     expect(store.getQueue(now).map((question) => question.id)).toEqual(['pinned', 'fresh', 'old']);
   });
 
+  it('keeps the distinct original wordings merged into an item, newest first', () => {
+    store = new BacklogStore();
+    const at = (minute: number): string => `2026-01-01T00:0${minute}:00Z`;
+    store.upsertQuestion(item('kb', 1, at(1)), { userLogin: 'alice', text: 'what keyboard do you use?', sentAt: at(1) });
+    store.upsertQuestion(item('kb', 2, at(2)), { userLogin: 'bob', text: 'which keyboard is that bro', sentAt: at(2) });
+    store.upsertQuestion(item('kb', 3, at(3)), { userLogin: 'cara', text: 'What keyboard do you use?', sentAt: at(3) });
+    for (const [index, text] of ['k1?', 'k2?', 'k3?', 'k4?'].entries()) {
+      store.upsertQuestion(item('kb', 4 + index, at(4)), { userLogin: `v${index}`, text, sentAt: at(4) });
+    }
+    const queued = store.getQueue()[0]!;
+    expect(queued.wordingCount).toBe(6);
+    expect(queued.wordings.map((wording) => wording.text)).toEqual(['k4?', 'k3?', 'k2?', 'k1?', 'What keyboard do you use?']);
+    expect(queued.wordings[4]).toMatchObject({ userLogin: 'cara', sentAt: at(3) });
+  });
+
   it('persists questions, asker counts, saved answers, and lifecycle events', () => {
     store = new BacklogStore();
     store.upsertQuestion(item('q1', 3, '2026-01-01T00:00:00Z', { alice: 2, bob: 1 }));

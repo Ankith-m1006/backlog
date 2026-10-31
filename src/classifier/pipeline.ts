@@ -12,11 +12,16 @@ interface PipelineOptions {
   classifyBatch?: (messages: ChatMessage[], openItems: OpenQuestionContext[]) => Promise<Classification[]>;
   embedNormalized?: (text: string) => Promise<number[]>;
   onSemanticMerge?: (score: number, fromId: string, intoId: string) => void;
-  onQuestion?: (question: QueueQuestion) => void;
+  onQuestion?: (question: QueueQuestion, message: ChatMessage) => void;
+  onStats?: (stats: ChatStats) => void;
   onError?: (error: Error) => void;
 }
 
+/** Live filter totals since start: every chat message seen, kept as a question, or ignored. */
+export interface ChatStats { chat: number; questions: number; ignored: number }
+
 export class QuestionPipeline {
+  private readonly counts: ChatStats = { chat: 0, questions: 0, ignored: 0 };
   private batch: ChatMessage[] = [];
   private timer: ReturnType<typeof setTimeout> | undefined;
   private readonly merger = new QuestionMerger();
@@ -31,8 +36,18 @@ export class QuestionPipeline {
     this.embedNormalized = options.embedNormalized ?? ((text) => embedText(text, { apiKey: options.apiKey }));
   }
 
+  stats(): ChatStats { return { ...this.counts }; }
+
+  private count(key: keyof ChatStats): void {
+    this.counts[key] += 1;
+    this.options.onStats?.(this.stats());
+  }
+
   add(message: ChatMessage): boolean {
-    if (!isCandidate(message) || message.isBot) return false;
+    if (message.isBot) return false;
+    this.counts.chat += 1;
+    if (!isCandidate(message)) { this.count('ignored'); return false; }
+    this.options.onStats?.(this.stats());
     this.batch.push(message);
     if (!this.timer) this.timer = setTimeout(() => { void this.flush().catch(() => undefined); }, this.intervalMs);
     return true;
@@ -76,7 +91,8 @@ export class QuestionPipeline {
             }
           }
         }
-        if (question) { questions.push(question); this.options.onQuestion?.(question); }
+        if (question) { questions.push(question); this.options.onQuestion?.(question, message); }
+        this.count(question ? 'questions' : 'ignored');
       }
       return questions;
     } catch (cause) {

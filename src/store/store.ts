@@ -5,7 +5,10 @@ import type { QueueQuestion } from '../classifier/merge.js';
 
 const HALF_LIFE_MS = 5 * 60_000;
 export type ItemStatus = 'open' | 'answered' | 'dismissed';
-export interface StoredQuestion extends QueueQuestion { status: ItemStatus; pinned: boolean; rankScore: number }
+export interface Wording { text: string; userLogin: string; sentAt: string }
+export interface StoredQuestion extends QueueQuestion { status: ItemStatus; pinned: boolean; rankScore: number; wordings: Wording[]; wordingCount: number }
+export interface MessageInput { userLogin: string; text: string; sentAt: string }
+const WORDING_LIMIT = 5;
 export interface SavedAnswer { id: string; question: string; answer: string; topicKey: string | null; embedding: number[] | null; createdAt: string; updatedAt: string }
 export interface AnswerInput { question: string; answer: string; topicKey?: string; embedding?: number[] }
 
@@ -34,6 +37,12 @@ export class BacklogStore extends EventEmitter {
         user_login TEXT NOT NULL, message_count INTEGER NOT NULL DEFAULT 1,
         PRIMARY KEY(question_id, user_login)
       );
+      CREATE TABLE IF NOT EXISTS item_messages (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        question_id TEXT NOT NULL REFERENCES questions(id) ON DELETE CASCADE,
+        user_login TEXT NOT NULL, text TEXT NOT NULL, sent_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS item_messages_question ON item_messages(question_id, id);
       CREATE TABLE IF NOT EXISTS saved_answers (
         id TEXT PRIMARY KEY, question TEXT NOT NULL, answer TEXT NOT NULL, topic_key TEXT,
         embedding TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
@@ -45,7 +54,7 @@ export class BacklogStore extends EventEmitter {
     `);
   }
 
-  upsertQuestion(question: QueueQuestion): void {
+  upsertQuestion(question: QueueQuestion, message?: MessageInput): void {
     const tx = this.db.transaction(() => {
       this.db.prepare(`INSERT INTO questions (id, channel, topic_key, normalized, text, count, created_at, updated_at)
         VALUES (@id, @channel, @topicKey, @normalized, @text, @count, @createdAt, @updatedAt)
@@ -54,6 +63,10 @@ export class BacklogStore extends EventEmitter {
       const replaceAskers = this.db.prepare('INSERT INTO askers (question_id, user_login, message_count) VALUES (?, ?, ?)');
       this.db.prepare('DELETE FROM askers WHERE question_id = ?').run(question.id);
       for (const [login, count] of Object.entries(question.askerCounts)) replaceAskers.run(question.id, login, count);
+      if (message?.text.trim()) {
+        this.db.prepare('INSERT INTO item_messages (question_id, user_login, text, sent_at) VALUES (?, ?, ?, ?)')
+          .run(question.id, message.userLogin, message.text.trim(), message.sentAt);
+      }
       this.recordEvent('question.updated', question.id, { count: question.count });
     });
     tx();
@@ -71,6 +84,7 @@ export class BacklogStore extends EventEmitter {
         text: String(row.text), count: Number(row.count), askers: Object.keys(askerCounts), askerCounts,
         createdAt: String(row.created_at), updatedAt, status: String(row.status) as ItemStatus,
         pinned: Boolean(row.pinned), rankScore: rankScore(Number(row.count), updatedAt, now),
+        ...this.getWordings(String(row.id)),
       } satisfies StoredQuestion;
     });
     return items.sort((left, right) => Number(right.pinned) - Number(left.pinned) || right.rankScore - left.rankScore || right.updatedAt.localeCompare(left.updatedAt));
@@ -141,6 +155,21 @@ export class BacklogStore extends EventEmitter {
       eventType: String(row.event_type), questionId: row.question_id === null ? null : String(row.question_id),
       details: JSON.parse(String(row.details)), occurredAt: String(row.occurred_at),
     }));
+  }
+
+  /** Distinct original chat wordings merged into one item, newest first. */
+  getWordings(questionId: string, limit = WORDING_LIMIT): { wordings: Wording[]; wordingCount: number } {
+    const rows = this.db.prepare('SELECT user_login, text, sent_at FROM item_messages WHERE question_id = ? ORDER BY id DESC')
+      .all(questionId) as Array<{ user_login: string; text: string; sent_at: string }>;
+    const seen = new Set<string>();
+    const distinct: Wording[] = [];
+    for (const row of rows) {
+      const key = row.text.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      distinct.push({ text: row.text, userLogin: row.user_login, sentAt: row.sent_at });
+    }
+    return { wordings: distinct.slice(0, limit), wordingCount: distinct.length };
   }
 
   close(): void { this.db.close(); }

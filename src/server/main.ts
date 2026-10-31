@@ -69,7 +69,8 @@ const demoEmbed = async (text: string): Promise<number[]> => {
 const pipeline = new QuestionPipeline({
   apiKey: env('OPENAI_API_KEY') ?? '',
   ...(demoMode ? { classifyBatch: classifyForDemo, embedNormalized: demoEmbed } : {}),
-  onQuestion: (question) => store.upsertQuestion(question),
+  onQuestion: (question, message) => store.upsertQuestion(question, { userLogin: message.userLogin, text: message.text, sentAt: message.sentAt }),
+  onStats: () => store.emit('statsChanged'),
   onError: (error) => console.error('[Backlog] classification failed', error.message),
 });
 const answerService = new SavedAnswerService(store, {
@@ -85,7 +86,7 @@ const answerQueue = botToken && env('TWITCH_CLIENT_ID') && broadcasterUserId && 
     broadcasterId: broadcasterUserId, botUserId,
   }), { onError: (error) => console.error('[Backlog] saved answer send failed', error.message) })
   : undefined;
-const app = await createApp({ store, webRoot: resolve('dist/web'), answerService, answerQueue, mode });
+const app = await createApp({ store, webRoot: resolve('dist/web'), answerService, answerQueue, mode, stats: () => pipeline.stats() });
 const commandHandler = new ChatCommandHandler(store, answerQueue);
 const port = Number(env('PORT') ?? 3001);
 await app.listen({ host: env('HOST') ?? '127.0.0.1', port });

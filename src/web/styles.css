@@ -77,7 +77,7 @@ button:focus-visible, a:focus-visible, summary:focus-visible, input:focus-visibl
 
 html:has(.overlay-shell), body:has(.overlay-shell) { min-height: 100vh; background: transparent; }
 .overlay-shell { width: min(760px, 100vw); padding: 18px; color: var(--ink); }
-.overlay-header { display: flex; align-items: center; gap: 14px; margin-bottom: 8px; padding: 4px 7px; color: var(--paper); text-shadow: 0 1px 3px #000; font-family: var(--mono); }
+.overlay-header { display: inline-flex; align-items: center; gap: 14px; margin-bottom: 8px; padding: 5px 9px; color: var(--ink); background: color-mix(in srgb, var(--paper) 96%, transparent); border: 1px solid var(--rule); border-radius: 4px; font-family: var(--mono); }
 .overlay-brand { font-size: 14px; font-weight: 600; }
 .overlay-channel { font-size: 10px; }
 .overlay-header .header-status { margin-left: auto; font-size: 9px; }
@@ -98,3 +98,4 @@ html:has(.overlay-shell), body:has(.overlay-shell) { min-height: 100vh; backgrou
 @media (max-width: 800px) { .control-grid { grid-template-columns: minmax(0, 1fr) 220px; gap: 12px; } .control-wrap { padding-inline: 16px; } .app-header { padding-inline: 16px; } .filter-counter { font-size: 8px; } }
 @media (max-width: 620px) { .app-header { flex-wrap: wrap; gap: 8px 14px; } .filter-counter { order: 4; width: 100%; margin: 0; } .control-grid { grid-template-columns: 1fr; } .answers-panel { border-left: 0; border-top: 1px solid var(--rule); padding: 10px 0 0; } .saved-list { max-height: 35vh; } .queue-content h2 { font-size: 20px; } .page-footer { flex-direction: column; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; } }
+.wording-list time { margin-left: 8px; color: var(--muted, #6b655c); font: 400 10px var(--mono); }

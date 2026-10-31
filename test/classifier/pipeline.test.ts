@@ -22,6 +22,24 @@ describe('QuestionPipeline', () => {
     pipeline.stop(); vi.useRealTimers();
   });
 
+  it('counts chat, questions, and ignored messages and hands the source message to onQuestion', async () => {
+    const seen: string[] = [];
+    const classifyBatch = vi.fn(async (batch: ChatMessage[]) => batch.map((item) => ({
+      id: item.id, isQuestion: item.id === 'q', normalized: item.id === 'q' ? 'How to join' : '', topicKey: item.id === 'q' ? 'joining' : '',
+    })));
+    const onStats = vi.fn();
+    const pipeline = new QuestionPipeline({ apiKey: 'unused', classifyBatch, embedNormalized: async () => [1, 0], onStats, onQuestion: (_question, message) => seen.push(message.text) });
+    expect(pipeline.add({ ...msg, id: 'q' })).toBe(true);
+    pipeline.add({ ...msg, id: 'b', text: 'is anyone else watching from Bengaluru today' });
+    expect(pipeline.add({ ...msg, id: 'l', text: 'lol' })).toBe(false);
+    expect(pipeline.add({ ...msg, id: 'bot', isBot: true })).toBe(false);
+    await pipeline.flush();
+    expect(pipeline.stats()).toEqual({ chat: 3, questions: 1, ignored: 2 });
+    expect(seen).toEqual(['How do I join?']);
+    expect(onStats).toHaveBeenLastCalledWith({ chat: 3, questions: 1, ignored: 2 });
+    pipeline.stop();
+  });
+
   it('merges semantically duplicate questions across batches and sends recent queue context', async () => {
     const classifyBatch = vi.fn(async (batch: ChatMessage[], context: OpenQuestionContext[]) => {
       expect(context).toBeDefined();

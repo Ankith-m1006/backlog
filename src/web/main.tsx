@@ -1,15 +1,16 @@
 import { StrictMode, useCallback, useEffect, useState, type FormEvent, type JSX } from 'react';
 import { createRoot } from 'react-dom/client';
-import { asksLabel, tallyMarks } from './presentation.js';
+import { askerLine, asksLabel, tallyMarks } from './presentation.js';
 import './styles.css';
 
 interface Wording { text: string; userLogin: string; sentAt?: string }
 interface QueueItem {
   id: string; text: string; normalized: string; count: number; askers: string[]; pinned: boolean; rankScore: number;
-  suggestedAnswer: { id: string; question: string; answer: string; score: number } | null; wordings?: Wording[];
+  suggestedAnswer: { id: string; question: string; answer: string; score: number } | null; wordings?: Wording[]; wordingCount?: number;
 }
 interface Answer { id: string; question: string; answer: string; topicKey: string | null }
-interface QueueEnvelope { type: string; items: QueueItem[] }
+interface ChatStats { chat: number; questions: number; ignored: number }
+interface QueueEnvelope { type: string; items?: QueueItem[]; stats?: ChatStats | null }
 
 async function api<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, { ...init, headers: { 'Content-Type': 'application/json', ...init?.headers } });
@@ -20,19 +21,24 @@ async function api<T>(url: string, init?: RequestInit): Promise<T> {
   return response.status === 204 ? undefined as T : response.json() as Promise<T>;
 }
 
-function useQueue(): { items: QueueItem[]; error: string; setError: (error: string) => void } {
+function useQueue(): { items: QueueItem[]; stats: ChatStats | null; error: string; setError: (error: string) => void } {
   const [items, setItems] = useState<QueueItem[]>([]);
+  const [stats, setStats] = useState<ChatStats | null>(null);
   const [error, setError] = useState('');
   useEffect(() => {
     let active = true;
     let reconnect: ReturnType<typeof setTimeout> | undefined;
-    const load = (): void => { void api<{ items: QueueItem[] }>('/api/queue').then((result) => { if (active) setItems(result.items); }).catch((cause: unknown) => { if (active) setError(cause instanceof Error ? cause.message : 'Could not load queue'); }); };
+    const load = (): void => { void api<{ items: QueueItem[]; stats?: ChatStats | null }>('/api/queue').then((result) => { if (active) { setItems(result.items); setStats(result.stats ?? null); } }).catch((cause: unknown) => { if (active) setError(cause instanceof Error ? cause.message : 'Could not load queue'); }); };
     const connect = (): WebSocket => {
       const scheme = location.protocol === 'https:' ? 'wss:' : 'ws:';
       const socket = new WebSocket(`${scheme}//${location.host}/ws`);
       socket.addEventListener('open', () => setError(''));
       socket.addEventListener('message', (event) => {
-        try { const data = JSON.parse(String(event.data)) as QueueEnvelope; if (data.type === 'queue') setItems(data.items); }
+        try {
+          const data = JSON.parse(String(event.data)) as QueueEnvelope;
+          if (data.type === 'queue' && data.items) setItems(data.items);
+          if ((data.type === 'queue' || data.type === 'stats') && data.stats !== undefined) setStats(data.stats);
+        }
         catch { setError('Received an invalid queue update'); }
       });
       socket.addEventListener('error', () => setError('Live connection interrupted. Reconnecting…'));
@@ -42,7 +48,20 @@ function useQueue(): { items: QueueItem[]; error: string; setError: (error: stri
     load(); const socket = connect();
     return () => { active = false; if (reconnect) clearTimeout(reconnect); socket.close(); };
   }, []);
-  return { items, error, setError };
+  return { items, stats, error, setError };
+}
+
+function wordingSummary(item: QueueItem): string {
+  const total = item.wordingCount || item.wordings?.length || 1;
+  return `${total} ${total === 1 ? 'wording' : 'wordings'} · ${asksLabel(item.count)}`;
+}
+
+function timeAgo(iso: string): string {
+  const seconds = Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 1000));
+  if (!Number.isFinite(seconds)) return '';
+  if (seconds < 60) return 'just now';
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+  return `${Math.floor(seconds / 3600)}h ago`;
 }
 
 function CountBadge({ count }: { count: number }): JSX.Element {
@@ -66,7 +85,7 @@ function Overlay(): JSX.Element {
     {error && <p className="connection-note">{error}</p>}
     {items.length === 0 ? <p className="overlay-empty">rail is clear. questions from chat land here.</p> : <div className="overlay-list">
       {items.slice(0, 3).map((item, index) => <article className={`overlay-card ${index === 0 ? 'top-question' : ''}`} key={item.id}>
-        <div className="overlay-copy"><p className="question-text">{item.normalized || item.text}</p><p className="asker-line">{item.askers.slice(0, 4).map((name) => `@${name}`).join(' · ')}{item.askers.length > 4 ? ` +${item.askers.length - 4} more` : ''}</p></div>
+        <div className="overlay-copy"><p className="question-text">{item.normalized || item.text}</p><p className="asker-line">{askerLine(item.askers)}</p></div>
         <CountBadge count={item.count} />
       </article>)}
     </div>}
@@ -74,7 +93,7 @@ function Overlay(): JSX.Element {
 }
 
 function Control(): JSX.Element {
-  const { items, error, setError } = useQueue();
+  const { items, stats, error, setError } = useQueue();
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [answers, setAnswers] = useState<Answer[]>([]);
   const [question, setQuestion] = useState(''); const [answer, setAnswer] = useState(''); const [editingId, setEditingId] = useState('');
@@ -114,7 +133,7 @@ function Control(): JSX.Element {
 
   const totalAsks = items.reduce((total, item) => total + item.count, 0);
   return <main className="control-page">
-    <header className="app-header"><a className="brand" href="/control">backlog</a><span className="channel-name">#ankithbuilds</span><StatusLine mode={mode} /><span className="filter-counter"><b>FILTER ON</b> · questions {items.length} · asks {totalAsks}</span></header>
+    <header className="app-header"><a className="brand" href="/control">backlog</a><span className="channel-name">#ankithbuilds</span><StatusLine mode={mode} /><span className="filter-counter"><b>FILTER ON</b> · {stats ? `chat ${stats.chat} · questions ${stats.questions} · ignored ${stats.ignored}` : `questions ${items.length} · asks ${totalAsks}`}</span></header>
     <div className="control-wrap"><Toast message={error} />
       <div className="control-grid">
         <section className="queue-panel"><div className="panel-heading"><div><h1>Questions from chat</h1><p>Filtered from live chat · ranked by asks and recency</p></div><span className="subtle-count">{items.length} open</span></div>
@@ -122,9 +141,9 @@ function Control(): JSX.Element {
             {items.map((item, index) => <article className={`queue-card ${index === selectedIndex ? 'keyboard-selected' : ''}`} key={item.id} onMouseEnter={() => setSelectedIndex(index)}>
               <div className="ticket-index">{String(index + 1).padStart(2, '0')}</div><div className="queue-content">
                 <div className="queue-meta"><CountBadge count={item.count} />{item.pinned && <span className="pinned-tag">PINNED</span>}</div>
-                <h2>{item.normalized || item.text}</h2><p className="asker-line">{item.askers.map((name) => `@${name}`).join(' · ')}</p>
-                <details className="wordings"><summary>{item.wordings ? `${item.wordings.length} ${item.wordings.length === 1 ? 'wording' : 'wordings'}` : `${asksLabel(item.count)} · first message only`}</summary>
-                  <div className="wording-list">{(item.wordings ?? [{ text: item.text, userLogin: item.askers[0] ?? 'viewer' }]).map((wording, wordingIndex) => <p key={`${wording.userLogin}-${wordingIndex}`}><b>@{wording.userLogin}</b> “{wording.text}”</p>)}</div>
+                <h2>{item.normalized || item.text}</h2><p className="asker-line">{askerLine(item.askers)}</p>
+                <details className="wordings" open={index === 0}><summary>{wordingSummary(item)}</summary>
+                  <div className="wording-list">{(item.wordings?.length ? item.wordings : [{ text: item.text, userLogin: item.askers[0] ?? 'viewer' }]).map((wording, wordingIndex) => <p key={`${wording.userLogin}-${wordingIndex}`}><b>@{wording.userLogin}</b> “{wording.text}”{wording.sentAt && <time>{timeAgo(wording.sentAt)}</time>}</p>)}</div>
                 </details>
                 {item.suggestedAnswer && <div className="suggested-answer"><div className="answer-match-label"><span>SAVED ANSWER MATCH</span><strong>{Math.round(item.suggestedAnswer.score * 100)}% match</strong></div><p>{item.suggestedAnswer.answer}</p><button className="send-button" onClick={() => void mutate(`/api/items/${item.id}/answered`, { answerId: item.suggestedAnswer!.id })}>Send in chat <kbd>S</kbd></button></div>}
                 <div className="queue-actions"><button className="text-button" onClick={() => void mutate(`/api/items/${item.id}/answered`)}>Mark answered</button><button className="text-button" onClick={() => void mutate(`/api/items/${item.id}/pin`)}>{item.pinned ? 'Unpin' : 'Pin'}</button><button className="text-button text-danger" onClick={() => void mutate(`/api/items/${item.id}/dismiss`)}>Dismiss</button></div>

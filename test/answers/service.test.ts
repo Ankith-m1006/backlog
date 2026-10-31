@@ -6,7 +6,7 @@ let store: BacklogStore;
 afterEach(() => store?.close());
 const question: StoredQuestion = {
   id: 'q1', channel: 'streamer', topicKey: 'join', normalized: 'How can I join the lobby?', text: 'How do I join?',
-  count: 1, askers: ['alice'], askerCounts: { alice: 1 }, createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z',
+  count: 1, askers: ['alice'], askerCounts: { alice: 1 }, createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z', wordings: [], wordingCount: 0,
   status: 'open', pinned: false, rankScore: 1,
 };
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { asksLabel, tallyMarks } from '../../src/web/presentation.js';
+import { askerLine, asksLabel, tallyMarks } from '../../src/web/presentation.js';
 
 describe('queue ticket presentation', () => {
   it('uses singular copy for one ask and never prefixes the count with plus', () => {
@@ -12,6 +12,16 @@ describe('queue ticket presentation', () => {
     expect(tallyMarks(3)).toBe('|||');
     expect(tallyMarks(5)).toBe('||||/');
     expect(tallyMarks(7)).toBe('||||/ ||');
-    expect(tallyMarks(12)).toBe('||||/ ||||/ ||');
+    expect(tallyMarks(9)).toBe('||||/ ||||');
+  });
+
+  it('caps tally marks at two groups so large counts stay short', () => {
+    expect(tallyMarks(10)).toBe('||||/ ||||/');
+    expect(tallyMarks(52)).toBe('||||/ ||||/');
+  });
+
+  it('shows at most four askers, then a count of the rest', () => {
+    expect(askerLine(['a', 'b'])).toBe('@a · @b');
+    expect(askerLine(['a', 'b', 'c', 'd', 'e', 'f'])).toBe('@a · @b · @c · @d +2 more');
   });
 });
