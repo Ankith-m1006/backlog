@@ -14,6 +14,7 @@ describe('classify', () => {
     expect(result).toEqual([{ id: 'm1', isQuestion: true, normalized: 'How to find the blue key', topicKey: 'blue key location' }]);
     const request = JSON.parse(String(fetchImpl.mock.calls[0]?.[1]?.body));
     expect(request.model).toBe('gpt-6-luna');
+    expect(request).not.toHaveProperty('temperature');
     expect(request.response_format.json_schema.strict).toBe(true);
     expect(fetchImpl).toHaveBeenCalledOnce();
   });
@@ -36,5 +37,10 @@ describe('classify', () => {
   it('rejects malformed classifier output instead of guessing', async () => {
     const fetchImpl = vi.fn().mockResolvedValue(mockResponse([]));
     await expect(classify(messages, { apiKey: 'test', fetchImpl: fetchImpl as unknown as typeof fetch })).rejects.toThrow('wrong number');
+  });
+
+  it('includes OpenAI error detail without exposing the API key', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({ ok: false, status: 400, text: async () => '{"error":{"message":"unsupported model parameter"}}' });
+    await expect(classify(messages, { apiKey: 'secret-key', fetchImpl: fetchImpl as unknown as typeof fetch })).rejects.toThrow('unsupported model parameter');
   });
 });

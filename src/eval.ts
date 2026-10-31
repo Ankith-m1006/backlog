@@ -4,6 +4,7 @@ import { requireLiveMode } from './config/mode.js';
 import { classify, type Classification, type OpenQuestionContext } from './classifier/openai.js';
 import { isCandidate } from './classifier/prefilter.js';
 import { embedTexts, cosineSimilarity } from './classifier/embedding.js';
+import { env } from './config/env.js';
 
 interface Label { id: string; user: string; text: string; isQuestion: boolean; topicKey: string; channel?: string }
 function message(label: Label) { return { id: label.id, channel: label.channel ?? 'eval', userId: label.user, userLogin: label.user, displayName: label.user, text: label.text, isMod: false, isBroadcaster: false, isBot: false, sentAt: new Date().toISOString() }; }
@@ -25,7 +26,7 @@ function pairAccuracy(labels: Label[], keys: string[]): number {
 }
 const pct = (value: number): string => `${(value * 100).toFixed(1)}%`;
 requireLiveMode();
-if (!process.env.OPENAI_API_KEY) throw new Error('OPENAI_API_KEY is required for live evaluation');
+if (!env('OPENAI_API_KEY')) throw new Error('OPENAI_API_KEY is required for live evaluation');
 const raw = await readFile('data/real/labels.jsonl', 'utf8').catch(() => '');
 const labels = raw.split(/\r?\n/u).filter(Boolean).map((line) => JSON.parse(line) as Label);
 if (labels.length < 150) throw new Error(`Live evaluation needs 150 real labels in data/real/labels.jsonl; found ${labels.length}.`);
@@ -33,7 +34,7 @@ const candidates = labels.map((item) => isCandidate({ text: item.text, channel: 
 const fullStats = { input: 0, output: 0, embedding: 0 };
 const baselineStats = { input: 0, output: 0 };
 const classifyBatch = async (items: Label[], context: OpenQuestionContext[] = [], usage: { input: number; output: number } = fullStats): Promise<Classification[]> => classify(items.map(message), {
-  apiKey: process.env.OPENAI_API_KEY!, model: process.env.OPENAI_MODEL,
+  apiKey: env('OPENAI_API_KEY')!, model: env('OPENAI_MODEL'),
   onUsage: (counts) => { usage.input += counts.inputTokens; usage.output += counts.outputTokens; },
 }, context);
 const selected = labels.filter((_item, i) => candidates[i]);
@@ -57,7 +58,7 @@ for (let i = 0; i < labels.length; i += 30) {
   batchTimes.push(performance.now() - began);
   const questionResults = results.map((result, j) => ({ result, index: indices[j]! })).filter(({ result }) => result.isQuestion);
   const vectors = await embedTexts(questionResults.map(({ result, index }) => result.normalized || labels[index]!.text), {
-    apiKey: process.env.OPENAI_API_KEY!, onUsage: (tokens) => { fullStats.embedding += tokens; },
+    apiKey: env('OPENAI_API_KEY')!, onUsage: (tokens) => { fullStats.embedding += tokens; },
   });
   for (const [j, { result, index }] of questionResults.entries()) {
     fullResults[index] = result;
@@ -83,7 +84,7 @@ const systems = [
 const totalMessages = labels.length;
 const totalCost = fullStats.input * 0.1 / 1e6 + fullStats.output * 0.5 / 1e6 + fullStats.embedding * 0.02 / 1e6;
 const worst = labels.map((item, i) => ({ item, missed: item.isQuestion && !fullPred[i] })).filter((row) => row.missed).slice(0, 5);
-const lines = ['# Real chat evaluation', '', `Evaluated ${totalMessages} hand-labelled messages from anonymized Twitch IRC captures. Classifier: \`${process.env.OPENAI_MODEL ?? 'gpt-6-luna'}\`; duplicate merge uses embedding cosine >= 0.88.`, '', '| System | Question precision | Recall | F1 | Duplicate-pair accuracy | Avg batch latency |', '|---|---:|---:|---:|---:|---:|', ...systems.map((row) => `| ${row.name} | ${pct(row.detection.precision)} | ${pct(row.detection.recall)} | ${pct(row.detection.f1)} | ${pct(row.pair)} | ${row.latency.toFixed(0)} ms |`), '', `Full Backlog measured API cost: approximately $${(totalCost * 1000 / totalMessages).toFixed(4)} per 1,000 chat messages (classifier input ${fullStats.input}, output ${fullStats.output}, embedding ${fullStats.embedding} tokens). The no-context baseline used an additional input ${baselineStats.input} and output ${baselineStats.output} classifier tokens.`, '', '## Worst five misses', '', ...(worst.length ? worst.map(({ item }) => `- ${item.text}`) : ['- None.']), ''];
+const lines = ['# Real chat evaluation', '', `Evaluated ${totalMessages} hand-labelled messages from anonymized Twitch IRC captures. Classifier: \`${env('OPENAI_MODEL') ?? 'gpt-6-luna'}\`; duplicate merge uses embedding cosine >= 0.88.`, '', '| System | Question precision | Recall | F1 | Duplicate-pair accuracy | Avg batch latency |', '|---|---:|---:|---:|---:|---:|', ...systems.map((row) => `| ${row.name} | ${pct(row.detection.precision)} | ${pct(row.detection.recall)} | ${pct(row.detection.f1)} | ${pct(row.pair)} | ${row.latency.toFixed(0)} ms |`), '', `Full Backlog measured API cost: approximately $${(totalCost * 1000 / totalMessages).toFixed(4)} per 1,000 chat messages (classifier input ${fullStats.input}, output ${fullStats.output}, embedding ${fullStats.embedding} tokens). The no-context baseline used an additional input ${baselineStats.input} and output ${baselineStats.output} classifier tokens.`, '', '## Worst five misses', '', ...(worst.length ? worst.map(({ item }) => `- ${item.text}`) : ['- None.']), ''];
 const report = lines.join('\n');
 await mkdir('docs', { recursive: true });
 await writeFile('docs/EVAL.md', report, 'utf8');

@@ -26,7 +26,10 @@ export async function embedTexts(texts: string[], options: EmbeddingOptions): Pr
     headers: { Authorization: `Bearer ${options.apiKey}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ model: options.model ?? 'text-embedding-3-small', input: texts }),
   }));
-  if (!response.ok) throw new Error(`OpenAI embedding failed (${response.status})`);
+  if (!response.ok) {
+    const detail = await response.text().catch(() => '');
+    throw new Error(`OpenAI embedding failed (${response.status})${detail ? `: ${detail}` : ''}`);
+  }
   const body = await response.json() as EmbeddingResponse;
   const vectors = body.data?.map((entry) => entry.embedding ?? []);
   if (!vectors || vectors.length !== texts.length || vectors.some((vector) => !vector.length || vector.some((value) => !Number.isFinite(value)))) throw new Error('OpenAI returned invalid embeddings');

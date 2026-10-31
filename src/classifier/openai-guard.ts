@@ -1,3 +1,5 @@
+import { env } from '../config/env.js';
+
 interface GuardOptions {
   maxCallsPerMinute?: number;
   now?: () => number;
@@ -15,7 +17,7 @@ export class OpenAICallGuard {
   private readonly log: (event: string, details: Record<string, number>) => void;
 
   constructor(options: GuardOptions = {}) {
-    this.maxCalls = options.maxCallsPerMinute ?? Number(process.env.OPENAI_MAX_CALLS_PER_MINUTE ?? 30);
+    this.maxCalls = options.maxCallsPerMinute ?? Number(env('OPENAI_MAX_CALLS_PER_MINUTE') ?? 30);
     if (!Number.isInteger(this.maxCalls) || this.maxCalls < 1) throw new Error('OPENAI_MAX_CALLS_PER_MINUTE must be a positive integer');
     this.now = options.now ?? Date.now;
     this.sleep = options.sleep ?? ((milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)));
